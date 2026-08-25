@@ -37,11 +37,14 @@ The initial landscape mapping is inherited from the working reference:
 raw X: 200 .. 3700 -> screen X: 0 .. 319
 raw Y: 240 .. 3800 -> screen Y: 0 .. 239
 minimum pressure: 300
+invert X: yes
+invert Y: yes
 ```
 
-These are provisional. The Stage 0 touch test must collect values at all four
-corners and the center. Calibration constants should be changed only after the
-direction and observed limits are confirmed.
+The first on-device test confirmed that both raw axes run opposite to the
+landscape screen axes, so `TOUCH_INVERT_X` and `TOUCH_INVERT_Y` are enabled.
+The numeric limits remain provisional. The Stage 0 touch test must collect
+values at all four corners and the center before they are refined.
 
 ## Expected memory profile
 

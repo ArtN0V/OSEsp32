@@ -66,12 +66,16 @@ bool TouchDriver::read(TouchPoint& point) {
   point.rawX = bestTwoAverage(data[0], data[2], data[4]);
   point.rawY = bestTwoAverage(data[1], data[3], data[5]);
   point.pressure = static_cast<uint16_t>(constrain(pressure, 0, 65535));
-  point.x = constrain(map(point.rawX, board::TOUCH_X_MIN, board::TOUCH_X_MAX,
-                          0, board::SCREEN_WIDTH - 1),
-                      0, board::SCREEN_WIDTH - 1);
-  point.y = constrain(map(point.rawY, board::TOUCH_Y_MIN, board::TOUCH_Y_MAX,
-                          0, board::SCREEN_HEIGHT - 1),
-                      0, board::SCREEN_HEIGHT - 1);
+  const int16_t mappedX = constrain(
+      map(point.rawX, board::TOUCH_X_MIN, board::TOUCH_X_MAX,
+          0, board::SCREEN_WIDTH - 1),
+      0, board::SCREEN_WIDTH - 1);
+  const int16_t mappedY = constrain(
+      map(point.rawY, board::TOUCH_Y_MIN, board::TOUCH_Y_MAX,
+          0, board::SCREEN_HEIGHT - 1),
+      0, board::SCREEN_HEIGHT - 1);
+  point.x = board::TOUCH_INVERT_X ? board::SCREEN_WIDTH - 1 - mappedX : mappedX;
+  point.y = board::TOUCH_INVERT_Y ? board::SCREEN_HEIGHT - 1 - mappedY : mappedY;
   point.pressed = true;
   return true;
 }

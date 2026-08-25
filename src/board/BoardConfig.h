@@ -45,5 +45,7 @@ constexpr int TOUCH_X_MAX = 3700;
 constexpr int TOUCH_Y_MIN = 240;
 constexpr int TOUCH_Y_MAX = 3800;
 constexpr int TOUCH_PRESSURE_MIN = 300;
+constexpr bool TOUCH_INVERT_X = true;
+constexpr bool TOUCH_INVERT_Y = true;
 
 }  // namespace board

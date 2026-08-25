@@ -151,13 +151,13 @@ Run the stress test at least ten times. Record the worst observed heap values.
 
 | Area | Result | Evidence/notes |
 |---|---|---|
-| Identity and memory | NOT RUN | |
-| TFT | NOT RUN | |
-| Backlight | NOT RUN | |
-| Touch | NOT RUN | |
-| SD | NOT RUN | |
-| RGB/speaker/LDR | NOT RUN | |
-| Combined stress | NOT RUN | |
+| Identity and memory | PASS | Passed on physical board, 2026-08-25 |
+| TFT | PASS | Passed on physical board, 2026-08-25 |
+| Backlight | PASS | Passed on physical board, 2026-08-25 |
+| Touch | RETEST | Both axes were reversed; inversion fix applied |
+| SD | PASS | Passed on physical board, 2026-08-25 |
+| RGB/speaker/LDR | PASS | Passed on physical board, 2026-08-25 |
+| Combined stress | PASS | Passed on physical board, 2026-08-25 |
 
 Stage 0 is complete when every row is `PASS`, or when an intentional hardware
 exception and its software workaround are recorded in `HARDWARE.md`.
