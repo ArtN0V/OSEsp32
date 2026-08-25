@@ -1,10 +1,10 @@
-# YellowOS architecture decisions
+# OSEsp32 architecture decisions
 
 ## Product boundary
 
-YellowOS is an embedded application environment, not a replacement for the
+OSEsp32 is an embedded application environment, not a replacement for the
 ESP32 ROM bootloader or FreeRTOS. Arduino-ESP32 supplies ESP-IDF and FreeRTOS;
-YellowOS supplies the hardware abstraction, services, graphical shell and
+OSEsp32 supplies the hardware abstraction, services, graphical shell and
 sandboxed application runtime.
 
 ## Layers

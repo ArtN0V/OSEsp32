@@ -5,7 +5,8 @@
 #include "BoardConfig.h"
 
 namespace {
-constexpr const char* NVS_NAMESPACE = "yellow_touch";
+constexpr const char* NVS_NAMESPACE = "osesp32_touch";
+constexpr const char* LEGACY_NVS_NAMESPACE = "yellow_touch";
 constexpr uint8_t CALIBRATION_VERSION = 1;
 }
 
@@ -32,8 +33,20 @@ void TouchDriver::useDefaultCalibration() {
 }
 
 void TouchDriver::loadCalibration() {
+  if (loadCalibrationFrom(NVS_NAMESPACE)) return;
+  if (loadCalibrationFrom(LEGACY_NVS_NAMESPACE)) {
+    // Preserve calibration made by early development builds while migrating
+    // the persisted copy to the final OSEsp32 namespace.
+    saveCalibration(calibration_.rawXMin, calibration_.rawXMax,
+                    calibration_.rawYMin, calibration_.rawYMax,
+                    calibration_.invertX, calibration_.invertY);
+  }
+}
+
+bool TouchDriver::loadCalibrationFrom(const char* nameSpace) {
   Preferences preferences;
-  if (!preferences.begin(NVS_NAMESPACE, true)) return;
+  if (!preferences.begin(nameSpace, true)) return false;
+  bool loaded = false;
   if (preferences.getUChar("version", 0) == CALIBRATION_VERSION) {
     const uint16_t xMin = preferences.getUShort("xmin", calibration_.rawXMin);
     const uint16_t xMax = preferences.getUShort("xmax", calibration_.rawXMax);
@@ -47,9 +60,11 @@ void TouchDriver::loadCalibration() {
       calibration_.invertX = preferences.getBool("invx", calibration_.invertX);
       calibration_.invertY = preferences.getBool("invy", calibration_.invertY);
       calibration_.stored = true;
+      loaded = true;
     }
   }
   preferences.end();
+  return loaded;
 }
 
 bool TouchDriver::saveCalibration(uint16_t rawXMin, uint16_t rawXMax,
@@ -86,8 +101,12 @@ bool TouchDriver::saveCalibration(uint16_t rawXMin, uint16_t rawXMax,
 bool TouchDriver::resetCalibration() {
   Preferences preferences;
   if (!preferences.begin(NVS_NAMESPACE, false)) return false;
-  const bool ok = preferences.clear();
+  bool ok = preferences.clear();
   preferences.end();
+  if (preferences.begin(LEGACY_NVS_NAMESPACE, false)) {
+    ok &= preferences.clear();
+    preferences.end();
+  }
   useDefaultCalibration();
   return ok;
 }

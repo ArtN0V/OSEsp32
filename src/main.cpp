@@ -1,17 +1,17 @@
 // PlatformIO compatibility entry point. Arduino IDE ignores this block and
-// uses OperationSystem.ino, so there is still exactly one setup()/loop().
+// uses OSEsp32.ino, so there is still exactly one setup()/loop().
 #ifdef PLATFORMIO
 
-#include "diagnostics/DiagnosticsApp.h"
+#include "app/OSEsp32App.h"
 
-DiagnosticsApp diagnostics;
+OSEsp32App os;
 
 void setup() {
-  diagnostics.begin();
+  os.begin();
 }
 
 void loop() {
-  diagnostics.update();
+  os.update();
 }
 
 #endif

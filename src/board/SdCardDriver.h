@@ -26,6 +26,6 @@ class SdCardDriver {
  private:
   SPIClass spi_;
   bool mounted_ = false;
-  static constexpr const char* TEST_FILE = "/yellowos_stage0.tmp";
-  static constexpr const char* STRESS_FILE = "/yellowos_stress.tmp";
+  static constexpr const char* TEST_FILE = "/osesp32_sd_test.tmp";
+  static constexpr const char* STRESS_FILE = "/osesp32_stress.tmp";
 };

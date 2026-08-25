@@ -1,4 +1,4 @@
-# YellowOS 4 MiB layout: dual OTA applications plus a small internal data area.
+# OSEsp32 4 MiB layout: dual OTA applications plus a small internal data area.
 # Name,     Type, SubType, Offset,   Size,      Flags
 nvs,        data, nvs,     0x9000,   0x5000,
 otadata,    data, ota,     0xE000,   0x2000,

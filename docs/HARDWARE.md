@@ -14,11 +14,11 @@ this physical unit behaves as the common resistive-touch CYD despite its label:
 | Touch | XPT2046 resistive | Proven |
 | Touch CLK/MOSI/MISO | 25 / 32 / 39 | Proven |
 | Touch CS/IRQ | 33 / 36 | Proven |
-| SD SCLK/MISO/MOSI | 18 / 19 / 23 | Must be verified in Stage 0 |
-| SD CS | 5 | Must be verified in Stage 0 |
-| Speaker | 26 | Must be verified in Stage 0 |
-| Light sensor | 34 ADC | Must be verified in Stage 0 |
-| RGB LED R/G/B | 4 / 16 / 17, active-low | Must be verified in Stage 0 |
+| SD SCLK/MISO/MOSI | 18 / 19 / 23 | Verified on the physical board |
+| SD CS | 5 | Verified on the physical board |
+| Speaker | 26 | Verified on the physical board |
+| Light sensor | 34 ADC | Verified on the physical board |
+| RGB LED R/G/B | 4 / 16 / 17, active-low | Verified on the physical board |
 
 ## SPI allocation
 
@@ -43,7 +43,7 @@ invert Y: yes
 
 The first on-device test confirmed that both raw axes run opposite to the
 landscape screen axes, so `TOUCH_INVERT_X` and `TOUCH_INVERT_Y` are enabled.
-The numeric limits remain provisional. The Stage 0 touch test must collect
+The numeric limits remain provisional. Touch calibration collects
 values at all four corners and the center before they are refined. The
 diagnostic five-point wizard calculates the limits by linear regression and
 stores the result in the `yellow_touch` NVS namespace; the constants above are
@@ -52,5 +52,5 @@ only fallback values.
 ## Expected memory profile
 
 The common board uses an ESP32-WROOM-32 module with 4 MiB flash and no PSRAM.
-Stage 0 treats that as an expectation, not a fact. The Serial report is the
+OSEsp32 treats that as an expectation, not a fact. The Serial report is the
 source of truth for this particular unit.

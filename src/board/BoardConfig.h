@@ -23,7 +23,7 @@ constexpr int TOUCH_MISO = 39;
 constexpr int TOUCH_CLK = 25;
 constexpr int TOUCH_CS = 33;
 
-// microSD/TF slot. Stage 0 must validate these pins on the actual board.
+// microSD/TF slot. These pins were validated on the target board in Stage 0.
 constexpr int SD_SCLK = 18;
 constexpr int SD_MISO = 19;
 constexpr int SD_MOSI = 23;
@@ -39,7 +39,7 @@ constexpr int LED_BLUE = 17;
 constexpr bool LED_ACTIVE_LOW = true;
 
 // Initial calibration copied from the working FlappyKiernan project.
-// Stage 0 records raw values so these limits can be refined per device.
+// Calibration records raw values so these limits can be refined per device.
 constexpr int TOUCH_X_MIN = 200;
 constexpr int TOUCH_X_MAX = 3700;
 constexpr int TOUCH_Y_MIN = 240;

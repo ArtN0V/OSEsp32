@@ -1,14 +1,16 @@
-# YellowOS roadmap
+# OSEsp32 roadmap
 
-## Stage 0 — hardware qualification (current)
+## Stage 0 — hardware qualification
 
 Validate identity, memory, TFT, backlight, touch, SD, RGB LED, speaker, light
 sensor and combined operation. Exit criterion: completed Stage 0 result table.
 
-## Stage 1 — platform foundation
+## Stage 1 — platform foundation (current)
 
-Keep the proven board drivers, introduce logging, event queues, lifecycle and
-fault reporting, then establish a memory budget from measured Stage 0 values.
+Keep the proven board drivers, introduce fixed-memory logging, event queues,
+lifecycle, fault reporting and continuous heap monitoring. Move touch
+calibration into a reusable system service shared by diagnostics, first-run
+setup and Settings.
 
 ## Stage 2 — graphical shell
 
@@ -22,7 +24,7 @@ directories and safe behavior when a card is removed or damaged.
 
 ## Stage 4 — application runtime
 
-Integrate constrained Lua, define Yellow API version 1, enforce memory/time
+Integrate constrained Lua, define OSEsp32 API version 1, enforce memory/time
 limits and load the first external Hello World `.yap` from SD.
 
 ## Stage 5 — desktop SDK

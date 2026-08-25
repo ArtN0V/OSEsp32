@@ -38,4 +38,5 @@ class TouchDriver {
   static int16_t bestTwoAverage(int16_t a, int16_t b, int16_t c);
   void useDefaultCalibration();
   void loadCalibration();
+  bool loadCalibrationFrom(const char* nameSpace);
 };

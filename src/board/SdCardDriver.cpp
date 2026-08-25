@@ -19,7 +19,7 @@ SdTestResult SdCardDriver::runReadWriteTest() {
   result.sizeBytes = SD.cardSize();
   result.usedBytes = SD.usedBytes();
 
-  static const char payload[] = "YellowOS stage 0 SD test v1\n";
+  static const char payload[] = "OSEsp32 SD test v1\n";
   SD.remove(TEST_FILE);
   File output = SD.open(TEST_FILE, FILE_WRITE);
   if (output) {

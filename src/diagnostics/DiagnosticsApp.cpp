@@ -3,7 +3,6 @@
 #include <ctype.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
-#include <math.h>
 
 #include "../board/BoardConfig.h"
 
@@ -16,8 +15,6 @@ constexpr uint16_t COLOR_WARN = 0xFD20;
 constexpr uint16_t COLOR_ERROR = 0xF800;
 constexpr uint16_t COLOR_TEXT = 0xFFFF;
 constexpr uint16_t COLOR_MUTED = 0xBDF7;
-constexpr int16_t CALIBRATION_X[5] = {20, 299, 299, 20, 160};
-constexpr int16_t CALIBRATION_Y[5] = {20, 20, 219, 219, 120};
 
 const char* cardTypeName(uint8_t type) {
   switch (type) {
@@ -29,14 +26,14 @@ const char* cardTypeName(uint8_t type) {
 }
 }  // namespace
 
-void DiagnosticsApp::begin() {
-  Serial.begin(115200);
-  delay(250);
+void DiagnosticsApp::begin(SystemKernel& kernel) {
+  kernel_ = &kernel;
   printBanner();
   configurePeripherals();
 
   const bool displayOk = display_.begin();
   touch_.begin();
+  calibration_.begin(touch_, kernel.events(), kernel.logger());
   Serial.printf("[BOOT] Display geometry: %ux%u (%s)\n", display_.width(),
                 display_.height(), displayOk ? "PASS" : "CHECK");
   Serial.println("[BOOT] XPT2046 software SPI initialized");
@@ -53,10 +50,10 @@ void DiagnosticsApp::begin() {
   display_.setTextColor(COLOR_TEXT, COLOR_BG);
   display_.setTextSize(1);
   display_.setCursor(18, 94);
-  display_.println("YellowOS hardware diagnostics");
+  display_.println("OSEsp32 hardware diagnostics");
   display_.setTextColor(COLOR_MUTED, COLOR_BG);
   display_.setCursor(18, 116);
-  display_.println("Stage 0 / build 1");
+  display_.println("Stage 1 foundation + diagnostics");
   delay(900);
   drawMenu();
   printHelp();
@@ -75,7 +72,7 @@ void DiagnosticsApp::configurePeripherals() {
 void DiagnosticsApp::printBanner() {
   Serial.println();
   Serial.println("================================================");
-  Serial.println(" YellowOS - ESP32-2432S028 Stage 0 diagnostics");
+  Serial.println(" OSEsp32 - Stage 1 platform + hardware diagnostics");
   Serial.println("================================================");
 }
 
@@ -86,7 +83,22 @@ void DiagnosticsApp::printHelp() {
   Serial.println("  t touch live   s SD read/write");
   Serial.println("  c calibrate    r reset touch calibration");
   Serial.println("  o onboard I/O  m memory/system report");
-  Serial.println("  x stress       q return to menu");
+  Serial.println("  k kernel info  x stress       q return to menu");
+}
+
+void DiagnosticsApp::printKernelInfo() {
+  const MemorySnapshot& memory = kernel_->monitor().latest();
+  Serial.println("[KERNEL]");
+  Serial.printf("  lifecycle=%u handled-events=%lu dropped-events=%lu faults=%lu\n",
+                static_cast<unsigned>(kernel_->lifecycle()),
+                static_cast<unsigned long>(kernel_->handledEventCount()),
+                static_cast<unsigned long>(kernel_->events().droppedCount()),
+                static_cast<unsigned long>(kernel_->faults().count()));
+  Serial.printf("  log entries=%u/%u\n", kernel_->logger().count(),
+                Logger::CAPACITY);
+  Serial.printf("  monitored heap=%u minimum=%u largest=%u psram=%u\n",
+                memory.freeHeap, memory.minimumFreeHeap,
+                memory.largestFreeBlock, memory.freePsram);
 }
 
 void DiagnosticsApp::printSystemInfo() {
@@ -136,7 +148,7 @@ void DiagnosticsApp::drawMenu() {
   display_.fillRect(0, 0, board::SCREEN_WIDTH, 32, 0x18E3);
   display_.setTextColor(COLOR_TEXT, 0x18E3);
   display_.setTextDatum(textdatum_t::middle_left);
-  display_.drawString("YellowOS  |  Stage 0 diagnostics", 10, 16);
+  display_.drawString("OSEsp32  |  Stage 1 platform", 10, 16);
 
   static const char* labels[] = {"DISPLAY", "TOUCH", "SD CARD",
                                  "I/O", "MEMORY", "STRESS"};
@@ -203,6 +215,7 @@ void DiagnosticsApp::handleSerial(char command) {
     case 's': runSdTest(); delay(900); drawMenu(); break;
     case 'o': runIoTest(); delay(900); drawMenu(); break;
     case 'm': runMemoryTest(); delay(900); drawMenu(); break;
+    case 'k': printKernelInfo(); break;
     case 'x': runStressTest(); delay(900); drawMenu(); break;
     case 'q': drawMenu(); break;
     default: Serial.printf("Unknown command '%c'. Send h for help.\n", command); break;
@@ -210,7 +223,7 @@ void DiagnosticsApp::handleSerial(char command) {
 }
 
 void DiagnosticsApp::runAllTests() {
-  Serial.println("[ALL] Starting automatic Stage 0 sequence");
+  Serial.println("[ALL] Starting hardware verification sequence");
   runDisplayTest();
   runBacklightTest();
   runSdTest();
@@ -298,14 +311,7 @@ void DiagnosticsApp::updateTouchScreen(const TouchPoint& point) {
 
 void DiagnosticsApp::startTouchCalibration(bool ignoreCurrentPress) {
   screen_ = Screen::Calibration;
-  calibrationIndex_ = 0;
-  calibrationSamples_ = 0;
-  calibrationSumX_ = 0;
-  calibrationSumY_ = 0;
-  calibrationWasPressed_ = false;
-  calibrationIgnoreUntilRelease_ = ignoreCurrentPress;
-  Serial.println("[CAL] Five-point calibration started");
-  Serial.println("[CAL] Hold the stylus on each cross, then release");
+  calibration_.start(ignoreCurrentPress);
   drawCalibrationTarget();
 }
 
@@ -314,13 +320,14 @@ void DiagnosticsApp::drawCalibrationTarget() {
   display_.setTextColor(COLOR_TEXT, COLOR_BG);
   display_.setTextDatum(textdatum_t::middle_center);
   char title[32];
-  snprintf(title, sizeof(title), "CALIBRATION %u / 5", calibrationIndex_ + 1);
+  snprintf(title, sizeof(title), "CALIBRATION %u / 5",
+           calibration_.pointIndex() + 1);
   display_.drawString(title, 160, 92);
   display_.setTextColor(COLOR_MUTED, COLOR_BG);
   display_.drawString("Hold the stylus on the cross", 160, 112);
 
-  const int16_t x = CALIBRATION_X[calibrationIndex_];
-  const int16_t y = CALIBRATION_Y[calibrationIndex_];
+  const int16_t x = calibration_.targetX();
+  const int16_t y = calibration_.targetY();
   display_.drawCircle(x, y, 10, COLOR_WARN);
   display_.drawCircle(x, y, 4, COLOR_TEXT);
   display_.drawFastHLine(x - 14, y, 29, COLOR_TEXT);
@@ -329,108 +336,32 @@ void DiagnosticsApp::drawCalibrationTarget() {
 }
 
 void DiagnosticsApp::updateTouchCalibration(bool pressed, const TouchPoint& point) {
-  if (calibrationIgnoreUntilRelease_) {
-    if (!pressed) calibrationIgnoreUntilRelease_ = false;
-    return;
-  }
-
-  if (pressed) {
-    if (!calibrationWasPressed_) {
-      calibrationWasPressed_ = true;
-      calibrationSamples_ = 0;
-      calibrationSumX_ = 0;
-      calibrationSumY_ = 0;
-    }
-    if (calibrationSamples_ < 64) {
-      calibrationSumX_ += point.rawX;
-      calibrationSumY_ += point.rawY;
-      ++calibrationSamples_;
-      const int barWidth = map(calibrationSamples_, 0, 24, 0, 120);
+  const CalibrationUpdate result = calibration_.update(pressed, point);
+  switch (result) {
+    case CalibrationUpdate::Sampling: {
+      const int barWidth = map(calibration_.sampleCount(), 0, 24, 0, 120);
       display_.fillRect(100, 132, constrain(barWidth, 0, 120), 6, COLOR_OK);
+      break;
     }
-    return;
+    case CalibrationUpdate::PointAccepted:
+    case CalibrationUpdate::PointRetry:
+      drawCalibrationTarget();
+      break;
+    case CalibrationUpdate::Completed:
+      drawStatus("CALIBRATION SAVED", "Five points accepted",
+                 "Returning to live test", COLOR_OK);
+      delay(1400);
+      runTouchTest();
+      break;
+    case CalibrationUpdate::Failed:
+      drawStatus("CALIBRATION FAILED", "Invalid raw range",
+                 "Try again with firm, centered presses", COLOR_ERROR);
+      delay(1400);
+      runTouchTest();
+      break;
+    case CalibrationUpdate::None:
+      break;
   }
-
-  if (!calibrationWasPressed_) return;
-  calibrationWasPressed_ = false;
-  if (calibrationSamples_ < 8) {
-    Serial.println("[CAL] Press was too short; repeat this point");
-    drawCalibrationTarget();
-    return;
-  }
-
-  TouchPoint& captured = calibrationPoints_[calibrationIndex_];
-  captured.rawX = calibrationSumX_ / calibrationSamples_;
-  captured.rawY = calibrationSumY_ / calibrationSamples_;
-  Serial.printf("[CAL] Point %u: raw=%u,%u samples=%u\n", calibrationIndex_ + 1,
-                captured.rawX, captured.rawY, calibrationSamples_);
-
-  ++calibrationIndex_;
-  if (calibrationIndex_ >= 5) {
-    finishTouchCalibration();
-  } else {
-    calibrationSamples_ = 0;
-    drawCalibrationTarget();
-  }
-}
-
-bool DiagnosticsApp::fitCalibrationAxis(const TouchPoint* points, bool useX,
-                                        uint16_t& rawMin, uint16_t& rawMax,
-                                        bool& inverted) {
-  double sumScreen = 0;
-  double sumRaw = 0;
-  double sumScreenSquared = 0;
-  double sumScreenRaw = 0;
-  const double screenMaximum = useX ? board::SCREEN_WIDTH - 1
-                                    : board::SCREEN_HEIGHT - 1;
-
-  for (int index = 0; index < 5; ++index) {
-    const double screen = useX ? CALIBRATION_X[index] : CALIBRATION_Y[index];
-    const double raw = useX ? points[index].rawX : points[index].rawY;
-    sumScreen += screen;
-    sumRaw += raw;
-    sumScreenSquared += screen * screen;
-    sumScreenRaw += screen * raw;
-  }
-
-  const double denominator = 5.0 * sumScreenSquared - sumScreen * sumScreen;
-  if (abs(denominator) < 1.0) return false;
-  const double slope = (5.0 * sumScreenRaw - sumScreen * sumRaw) / denominator;
-  const double intercept = (sumRaw - slope * sumScreen) / 5.0;
-  const int rawAtStart = constrain(static_cast<int>(lround(intercept)), 0, 4095);
-  const int rawAtEnd = constrain(
-      static_cast<int>(lround(intercept + slope * screenMaximum)), 0, 4095);
-
-  inverted = rawAtStart > rawAtEnd;
-  rawMin = min(rawAtStart, rawAtEnd);
-  rawMax = max(rawAtStart, rawAtEnd);
-  return rawMax > rawMin + 500;
-}
-
-void DiagnosticsApp::finishTouchCalibration() {
-  uint16_t xMin = 0;
-  uint16_t xMax = 0;
-  uint16_t yMin = 0;
-  uint16_t yMax = 0;
-  bool invertX = false;
-  bool invertY = false;
-  const bool fitOk = fitCalibrationAxis(calibrationPoints_, true, xMin, xMax, invertX) &&
-                     fitCalibrationAxis(calibrationPoints_, false, yMin, yMax, invertY);
-  const bool saved = fitOk &&
-                     touch_.saveCalibration(xMin, xMax, yMin, yMax, invertX, invertY);
-
-  if (saved) {
-    Serial.printf("[CAL] Saved: X=%u..%u invert=%u, Y=%u..%u invert=%u\n",
-                  xMin, xMax, invertX, yMin, yMax, invertY);
-    drawStatus("CALIBRATION SAVED", "Five points accepted",
-               "Returning to live test", COLOR_OK);
-  } else {
-    Serial.println("[CAL] Calibration rejected: raw range is invalid");
-    drawStatus("CALIBRATION FAILED", "Invalid raw range",
-               "Try again with firm, centered presses", COLOR_ERROR);
-  }
-  delay(1400);
-  runTouchTest();
 }
 
 void DiagnosticsApp::runSdTest() {
