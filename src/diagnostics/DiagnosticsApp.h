@@ -12,7 +12,7 @@ class DiagnosticsApp {
   void update();
 
  private:
-  enum class Screen { Menu, Touch };
+  enum class Screen { Menu, Touch, Calibration };
 
   DisplayDriver display_;
   TouchDriver touch_;
@@ -20,6 +20,13 @@ class DiagnosticsApp {
   Screen screen_ = Screen::Menu;
   bool previousTouch_ = false;
   uint32_t lastTouchDraw_ = 0;
+  uint8_t calibrationIndex_ = 0;
+  uint16_t calibrationSamples_ = 0;
+  uint32_t calibrationSumX_ = 0;
+  uint32_t calibrationSumY_ = 0;
+  bool calibrationWasPressed_ = false;
+  bool calibrationIgnoreUntilRelease_ = false;
+  TouchPoint calibrationPoints_[5];
 
   void configurePeripherals();
   void printBanner();
@@ -31,6 +38,13 @@ class DiagnosticsApp {
   void handleSerial(char command);
   void handleMenuTouch(const TouchPoint& point);
   void updateTouchScreen(const TouchPoint& point);
+  void startTouchCalibration(bool ignoreCurrentPress);
+  void drawCalibrationTarget();
+  void updateTouchCalibration(bool pressed, const TouchPoint& point);
+  void finishTouchCalibration();
+  static bool fitCalibrationAxis(const TouchPoint* points, bool useX,
+                                 uint16_t& rawMin, uint16_t& rawMax,
+                                 bool& inverted);
 
   void runAllTests();
   void runDisplayTest();

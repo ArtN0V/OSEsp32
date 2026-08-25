@@ -44,7 +44,10 @@ invert Y: yes
 The first on-device test confirmed that both raw axes run opposite to the
 landscape screen axes, so `TOUCH_INVERT_X` and `TOUCH_INVERT_Y` are enabled.
 The numeric limits remain provisional. The Stage 0 touch test must collect
-values at all four corners and the center before they are refined.
+values at all four corners and the center before they are refined. The
+diagnostic five-point wizard calculates the limits by linear regression and
+stores the result in the `yellow_touch` NVS namespace; the constants above are
+only fallback values.
 
 ## Expected memory profile
 

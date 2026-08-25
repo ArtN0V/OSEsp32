@@ -57,6 +57,8 @@ a  all automatic tests
 d  display
 b  backlight
 t  touch live view
+c  five-point touch calibration
+r  reset saved touch calibration
 s  SD mount/read/write
 o  RGB LED, speaker, light sensor
 m  memory and chip report

@@ -1,6 +1,13 @@
 #include "TouchDriver.h"
 
+#include <Preferences.h>
+
 #include "BoardConfig.h"
+
+namespace {
+constexpr const char* NVS_NAMESPACE = "yellow_touch";
+constexpr uint8_t CALIBRATION_VERSION = 1;
+}
 
 void TouchDriver::begin() {
   pinMode(board::TOUCH_CS, OUTPUT);
@@ -10,6 +17,79 @@ void TouchDriver::begin() {
   pinMode(board::TOUCH_IRQ, INPUT);
   digitalWrite(board::TOUCH_CS, HIGH);
   digitalWrite(board::TOUCH_CLK, LOW);
+  useDefaultCalibration();
+  loadCalibration();
+}
+
+void TouchDriver::useDefaultCalibration() {
+  calibration_.rawXMin = board::TOUCH_X_MIN;
+  calibration_.rawXMax = board::TOUCH_X_MAX;
+  calibration_.rawYMin = board::TOUCH_Y_MIN;
+  calibration_.rawYMax = board::TOUCH_Y_MAX;
+  calibration_.invertX = board::TOUCH_INVERT_X;
+  calibration_.invertY = board::TOUCH_INVERT_Y;
+  calibration_.stored = false;
+}
+
+void TouchDriver::loadCalibration() {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return;
+  if (preferences.getUChar("version", 0) == CALIBRATION_VERSION) {
+    const uint16_t xMin = preferences.getUShort("xmin", calibration_.rawXMin);
+    const uint16_t xMax = preferences.getUShort("xmax", calibration_.rawXMax);
+    const uint16_t yMin = preferences.getUShort("ymin", calibration_.rawYMin);
+    const uint16_t yMax = preferences.getUShort("ymax", calibration_.rawYMax);
+    if (xMax > xMin + 500 && yMax > yMin + 500) {
+      calibration_.rawXMin = xMin;
+      calibration_.rawXMax = xMax;
+      calibration_.rawYMin = yMin;
+      calibration_.rawYMax = yMax;
+      calibration_.invertX = preferences.getBool("invx", calibration_.invertX);
+      calibration_.invertY = preferences.getBool("invy", calibration_.invertY);
+      calibration_.stored = true;
+    }
+  }
+  preferences.end();
+}
+
+bool TouchDriver::saveCalibration(uint16_t rawXMin, uint16_t rawXMax,
+                                  uint16_t rawYMin, uint16_t rawYMax,
+                                  bool invertX, bool invertY) {
+  if (rawXMax <= rawXMin + 500 || rawYMax <= rawYMin + 500 ||
+      rawXMax > 4095 || rawYMax > 4095) {
+    return false;
+  }
+
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  bool ok = true;
+  ok &= preferences.putUShort("xmin", rawXMin) == sizeof(uint16_t);
+  ok &= preferences.putUShort("xmax", rawXMax) == sizeof(uint16_t);
+  ok &= preferences.putUShort("ymin", rawYMin) == sizeof(uint16_t);
+  ok &= preferences.putUShort("ymax", rawYMax) == sizeof(uint16_t);
+  ok &= preferences.putBool("invx", invertX) == sizeof(bool);
+  ok &= preferences.putBool("invy", invertY) == sizeof(bool);
+  ok &= preferences.putUChar("version", CALIBRATION_VERSION) == sizeof(uint8_t);
+  preferences.end();
+  if (!ok) return false;
+
+  calibration_.rawXMin = rawXMin;
+  calibration_.rawXMax = rawXMax;
+  calibration_.rawYMin = rawYMin;
+  calibration_.rawYMax = rawYMax;
+  calibration_.invertX = invertX;
+  calibration_.invertY = invertY;
+  calibration_.stored = true;
+  return true;
+}
+
+bool TouchDriver::resetCalibration() {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool ok = preferences.clear();
+  preferences.end();
+  useDefaultCalibration();
+  return ok;
 }
 
 uint8_t TouchDriver::transfer8(uint8_t value) {
@@ -67,15 +147,15 @@ bool TouchDriver::read(TouchPoint& point) {
   point.rawY = bestTwoAverage(data[1], data[3], data[5]);
   point.pressure = static_cast<uint16_t>(constrain(pressure, 0, 65535));
   const int16_t mappedX = constrain(
-      map(point.rawX, board::TOUCH_X_MIN, board::TOUCH_X_MAX,
+      map(point.rawX, calibration_.rawXMin, calibration_.rawXMax,
           0, board::SCREEN_WIDTH - 1),
       0, board::SCREEN_WIDTH - 1);
   const int16_t mappedY = constrain(
-      map(point.rawY, board::TOUCH_Y_MIN, board::TOUCH_Y_MAX,
+      map(point.rawY, calibration_.rawYMin, calibration_.rawYMax,
           0, board::SCREEN_HEIGHT - 1),
       0, board::SCREEN_HEIGHT - 1);
-  point.x = board::TOUCH_INVERT_X ? board::SCREEN_WIDTH - 1 - mappedX : mappedX;
-  point.y = board::TOUCH_INVERT_Y ? board::SCREEN_HEIGHT - 1 - mappedY : mappedY;
+  point.x = calibration_.invertX ? board::SCREEN_WIDTH - 1 - mappedX : mappedX;
+  point.y = calibration_.invertY ? board::SCREEN_HEIGHT - 1 - mappedY : mappedY;
   point.pressed = true;
   return true;
 }

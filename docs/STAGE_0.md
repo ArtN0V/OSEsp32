@@ -67,9 +67,13 @@ than adding inversions throughout the application.
 
 ## Test 0.4 — raw touch and calibration
 
-Run command `t`. Press the four marked corners, center, and several points near
-each edge. The screen and Serial Monitor show raw X/Y, pressure and mapped X/Y.
-Send `q` to leave the test.
+Run command `t`. Press **CALIBRATE** on screen or send command `c`. Hold the
+stylus on each of the five displayed crosses until enough samples are taken,
+then release before moving to the next cross. The calculated calibration is
+saved in ESP32 NVS and is restored on every boot. Afterward, press the four
+marked corners, center, and several points near each edge in the live test.
+Send `q` to leave the test. Command `r` deletes the stored calibration and
+restores the compiled defaults.
 
 Acceptance:
 
