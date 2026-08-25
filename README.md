@@ -4,19 +4,19 @@ OSEsp32 is a lightweight Windows-inspired application environment for the
 ESP32-2432S028 Cheap Yellow Display. The project is built as a normal Arduino
 IDE sketch while keeping the implementation in modular C++ files.
 
-The Stage 0 hardware qualification is complete. Development is now on
-**Roadmap Stage 1: platform foundation**. The diagnostic UI remains available
-while kernel services are introduced underneath it.
+Stages 0 and 1 established the hardware and platform foundation. Development
+is now on **Roadmap Stage 2: graphical shell**. The normal boot opens the LVGL
+desktop; the proven diagnostic UI remains available as a recovery mode.
 
 ## Current capabilities
 
-- Reports chip, CPU, flash, PSRAM, sketch and heap information.
-- Tests ILI9341 colors, geometry and orientation.
-- Tests backlight brightness control.
-- Reads XPT2046 touch through software SPI and prints raw/calibrated values.
-- Mounts the TF/microSD slot and verifies write/read/content integrity.
-- Tests the RGB LED, speaker and light sensor.
-- Stresses display, touch and SD together while tracking heap health.
+- Windows-inspired desktop, taskbar, Start menu, uptime clock and foreground
+  windows.
+- Built-in Files placeholder, Settings, System Info, Text Input and About apps.
+- On-screen keyboard and partial LVGL rendering without a full framebuffer.
+- First-boot and Settings-driven five-point touch calibration stored in NVS.
+- Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
+  light sensor and memory/stress testing.
 
 ## Arduino IDE setup
 
@@ -24,7 +24,7 @@ while kernel services are introduced underneath it.
 2. Add Espressif's ESP32 Boards package URL in Preferences:
    `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
 3. Install **esp32 by Espressif Systems** in Boards Manager.
-4. Install **LovyanGFX** in Library Manager.
+4. Install **LovyanGFX** and **lvgl 9.5.0** in Library Manager.
 5. Open `OSEsp32.ino` from this folder.
 6. Select **ESP32 Dev Module**.
 7. Use these initial Tools settings:
@@ -46,10 +46,16 @@ command-line/CI build checks. They do not change the Arduino IDE workflow and
 do not create a second `setup()` or `loop()` when Arduino IDE compiles the
 sketch.
 
-## Hardware diagnostics
+## Desktop and hardware diagnostics
 
-The screen presents six touch buttons. The same tests can be started through
-Serial Monitor:
+Normal boot opens the desktop. Use **System Info → Hardware Diagnostics** to
+store a one-shot recovery request and restart into the hardware test screen.
+Press **SHELL** in the diagnostic menu to reboot back into the desktop. A
+computer and Serial Monitor are not required; the `u` command remains only as
+an optional development shortcut.
+
+The diagnostic screen presents six touch buttons. The same tests can be
+started through Serial Monitor:
 
 ```text
 h  help
@@ -65,6 +71,7 @@ m  memory and chip report
 k  kernel state, events, faults and monitored heap
 x  combined stress test
 q  return to menu
+u  reboot into graphical shell
 ```
 
 Start with the ordered procedure in [docs/STAGE_0.md](docs/STAGE_0.md). Record
@@ -85,13 +92,13 @@ Required now:
 
 - Arduino-ESP32 core
 - LovyanGFX
+- LVGL 9.5.0
 - Built-in `SPI`, `FS` and `SD` libraries from Arduino-ESP32
+- Built-in `Preferences` for calibration and one-shot boot settings
 
 Planned for later stages:
 
-- LVGL 9 for the shell and window system
 - A trimmed Lua runtime for `.yap` applications
-- NVS/Preferences for settings
 - mbedTLS hashing for package validation
 
 The XPT2046 library is deliberately not required. Touch uses a small software
@@ -102,16 +109,20 @@ SPI driver so the SD card can own the second hardware SPI peripheral.
 ```text
 OSEsp32.ino               Arduino entry point only
 partitions.csv            4 MiB flash layout
+build_opt.h / lv_conf.h   Arduino IDE LVGL configuration
 src/board/                board pin map and hardware drivers
 src/app/                  top-level application orchestrator
 src/kernel/               lifecycle, events, logging, faults and monitoring
 src/services/             reusable OS services, including touch calibration
+src/ui/                   LVGL display and calibrated pointer adapter
+src/shell/                desktop, windows and built-in applications
 src/diagnostics/          hardware diagnostic application
 docs/HARDWARE.md          known and unverified hardware facts
 docs/STAGE_0.md           exact test procedure and acceptance criteria
 docs/ARCHITECTURE.md      long-term OSEsp32 boundaries
 docs/ROADMAP.md           development stages
 docs/STAGE_1.md           platform-foundation plan and acceptance checks
+docs/STAGE_2.md           graphical-shell plan and acceptance checks
 ```
 
 ## Safety

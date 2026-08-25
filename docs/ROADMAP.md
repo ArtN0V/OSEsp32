@@ -5,14 +5,14 @@
 Validate identity, memory, TFT, backlight, touch, SD, RGB LED, speaker, light
 sensor and combined operation. Exit criterion: completed Stage 0 result table.
 
-## Stage 1 — platform foundation (current)
+## Stage 1 — platform foundation
 
 Keep the proven board drivers, introduce fixed-memory logging, event queues,
 lifecycle, fault reporting and continuous heap monitoring. Move touch
 calibration into a reusable system service shared by diagnostics, first-run
 setup and Settings.
 
-## Stage 2 — graphical shell
+## Stage 2 — graphical shell (current)
 
 Integrate LVGL partial rendering and build the Windows-inspired theme, desktop,
 taskbar, Start menu, dialogs and touch keyboard.

@@ -12,6 +12,9 @@ enum class SystemEventType : uint8_t {
   TouchCalibrationPoint,
   TouchCalibrationCompleted,
   TouchCalibrationFailed,
+  TouchCalibrationCancelled,
+  ShellReady,
+  ShellApplicationOpened,
 };
 
 struct SystemEvent {

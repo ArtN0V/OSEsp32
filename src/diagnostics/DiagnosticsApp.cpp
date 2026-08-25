@@ -53,7 +53,7 @@ void DiagnosticsApp::begin(SystemKernel& kernel) {
   display_.println("OSEsp32 hardware diagnostics");
   display_.setTextColor(COLOR_MUTED, COLOR_BG);
   display_.setCursor(18, 116);
-  display_.println("Stage 1 foundation + diagnostics");
+  display_.println("Recovery hardware diagnostics");
   delay(900);
   drawMenu();
   printHelp();
@@ -72,7 +72,7 @@ void DiagnosticsApp::configurePeripherals() {
 void DiagnosticsApp::printBanner() {
   Serial.println();
   Serial.println("================================================");
-  Serial.println(" OSEsp32 - Stage 1 platform + hardware diagnostics");
+  Serial.println(" OSEsp32 - recovery hardware diagnostics");
   Serial.println("================================================");
 }
 
@@ -84,6 +84,7 @@ void DiagnosticsApp::printHelp() {
   Serial.println("  c calibrate    r reset touch calibration");
   Serial.println("  o onboard I/O  m memory/system report");
   Serial.println("  k kernel info  x stress       q return to menu");
+  Serial.println("  u reboot into graphical shell");
 }
 
 void DiagnosticsApp::printKernelInfo() {
@@ -130,13 +131,21 @@ void DiagnosticsApp::update() {
   const bool newPress = pressed && !previousTouch_;
 
   if (screen_ == Screen::Menu && newPress) handleMenuTouch(point);
-  if (screen_ == Screen::Touch && newPress &&
+  if (screen_ == Screen::Touch && newPress && point.x >= 248 && point.y < 34) {
+    drawMenu();
+  } else if (screen_ == Screen::Touch && newPress &&
       point.x >= 100 && point.x <= 220 && point.y >= 198) {
     startTouchCalibration(true);
   } else if (screen_ == Screen::Touch && pressed) {
     updateTouchScreen(point);
   }
-  if (screen_ == Screen::Calibration) updateTouchCalibration(pressed, point);
+  if (screen_ == Screen::Calibration && newPress && point.x >= 120 &&
+      point.x <= 200 && point.y < 34) {
+    calibration_.cancel();
+    runTouchTest();
+  } else if (screen_ == Screen::Calibration) {
+    updateTouchCalibration(pressed, point);
+  }
 
   previousTouch_ = pressed;
   delay(3);
@@ -148,7 +157,12 @@ void DiagnosticsApp::drawMenu() {
   display_.fillRect(0, 0, board::SCREEN_WIDTH, 32, 0x18E3);
   display_.setTextColor(COLOR_TEXT, 0x18E3);
   display_.setTextDatum(textdatum_t::middle_left);
-  display_.drawString("OSEsp32  |  Stage 1 platform", 10, 16);
+  display_.drawString("OSEsp32 DIAGNOSTICS", 8, 16);
+  display_.fillRoundRect(244, 3, 72, 26, 3, COLOR_PANEL);
+  display_.drawRoundRect(244, 3, 72, 26, 3, COLOR_ACCENT);
+  display_.setTextColor(COLOR_TEXT, COLOR_PANEL);
+  display_.setTextDatum(textdatum_t::middle_center);
+  display_.drawString("SHELL", 280, 16);
 
   static const char* labels[] = {"DISPLAY", "TOUCH", "SD CARD",
                                  "I/O", "MEMORY", "STRESS"};
@@ -181,6 +195,10 @@ void DiagnosticsApp::drawStatus(const char* title, const char* line1,
 }
 
 void DiagnosticsApp::handleMenuTouch(const TouchPoint& point) {
+  if (point.x >= 240 && point.y < 34) {
+    returnToShell();
+    return;
+  }
   if (point.y < 40 || point.y >= 226) return;
   const int column = point.x < 160 ? 0 : 1;
   const int row = (point.y - 40) / 62;
@@ -196,6 +214,14 @@ void DiagnosticsApp::handleMenuTouch(const TouchPoint& point) {
   }
   delay(700);
   drawMenu();
+}
+
+void DiagnosticsApp::returnToShell() {
+  drawStatus("RETURN TO SHELL", "Restarting OSEsp32...",
+             "No computer connection required", COLOR_ACCENT);
+  Serial.println("[SYSTEM] Rebooting into graphical shell...");
+  delay(350);
+  ESP.restart();
 }
 
 void DiagnosticsApp::handleSerial(char command) {
@@ -218,6 +244,9 @@ void DiagnosticsApp::handleSerial(char command) {
     case 'k': printKernelInfo(); break;
     case 'x': runStressTest(); delay(900); drawMenu(); break;
     case 'q': drawMenu(); break;
+    case 'u':
+      returnToShell();
+      break;
     default: Serial.printf("Unknown command '%c'. Send h for help.\n", command); break;
   }
 }
@@ -277,11 +306,16 @@ void DiagnosticsApp::runTouchTest() {
   display_.setTextColor(COLOR_TEXT, COLOR_ACCENT);
   display_.setCursor(8, 11);
   display_.print("TOUCH LIVE TEST");
+  display_.fillRoundRect(250, 3, 66, 26, 3, COLOR_PANEL);
+  display_.drawRoundRect(250, 3, 66, 26, 3, COLOR_TEXT);
+  display_.setTextColor(COLOR_TEXT, COLOR_PANEL);
+  display_.setTextDatum(textdatum_t::middle_center);
+  display_.drawString("BACK", 283, 16);
   display_.setTextColor(COLOR_MUTED, COLOR_BG);
   display_.setCursor(8, 42);
-  display_.print("Touch corners and center. Serial: q to exit");
-  display_.drawRect(2, 2, 16, 16, COLOR_WARN);
-  display_.drawRect(302, 2, 16, 16, COLOR_WARN);
+  display_.print("Touch corners and center");
+  display_.drawRect(2, 35, 16, 16, COLOR_WARN);
+  display_.drawRect(302, 35, 16, 16, COLOR_WARN);
   display_.drawRect(2, 222, 16, 16, COLOR_WARN);
   display_.drawRect(302, 222, 16, 16, COLOR_WARN);
   display_.drawCircle(160, 120, 10, COLOR_WARN);
@@ -325,6 +359,10 @@ void DiagnosticsApp::drawCalibrationTarget() {
   display_.drawString(title, 160, 92);
   display_.setTextColor(COLOR_MUTED, COLOR_BG);
   display_.drawString("Hold the stylus on the cross", 160, 112);
+  display_.fillRoundRect(122, 3, 76, 26, 3, COLOR_PANEL);
+  display_.drawRoundRect(122, 3, 76, 26, 3, COLOR_ACCENT);
+  display_.setTextColor(COLOR_TEXT, COLOR_PANEL);
+  display_.drawString("CANCEL", 160, 16);
 
   const int16_t x = calibration_.targetX();
   const int16_t y = calibration_.targetY();

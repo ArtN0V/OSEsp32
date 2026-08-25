@@ -44,11 +44,13 @@ classic ESP32 cannot isolate a faulty native application from the OS.
 
 ## Threading model
 
-- UI task: LVGL timer and input dispatch.
+- UI task: LVGL timer, input dispatch and all object mutation.
 - Storage task: serialized SD access.
 - Application task: Lua VM and application callbacks.
 - System task: settings, monitoring and lifecycle.
 - Network task: created only while network functionality is requested.
 
-The initial diagnostics are intentionally simpler and mostly synchronous. They
-validate hardware before this task model is introduced in Stage 1.
+Stage 2 runs the kernel and LVGL cooperatively from the Arduino loop so all UI
+mutation is single-threaded. Recovery diagnostics remain intentionally
+synchronous. Dedicated storage and application tasks are introduced only when
+their services arrive in Stages 3 and 4.

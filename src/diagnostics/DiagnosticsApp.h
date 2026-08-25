@@ -35,6 +35,7 @@ class DiagnosticsApp {
                   uint16_t color);
   void handleSerial(char command);
   void handleMenuTouch(const TouchPoint& point);
+  void returnToShell();
   void updateTouchScreen(const TouchPoint& point);
   void startTouchCalibration(bool ignoreCurrentPress);
   void drawCalibrationTarget();

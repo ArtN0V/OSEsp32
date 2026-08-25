@@ -9,7 +9,7 @@ bool SystemKernel::begin() {
 
   faults_.begin(events_, logger_);
   monitor_.begin(events_, logger_);
-  logger_.info("kernel", "OSEsp32 stage 1 starting; reset reason=%d",
+  logger_.info("kernel", "OSEsp32 kernel starting; reset reason=%d",
                static_cast<int>(esp_reset_reason()));
   events_.publish(SystemEventType::BootCompleted, ESP.getFreeHeap(),
                   ESP.getFlashChipSize());

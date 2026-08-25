@@ -23,6 +23,7 @@ class TouchCalibrationService {
 
   void begin(TouchDriver& touch, EventBus& events, Logger& logger);
   void start(bool ignoreUntilRelease = false);
+  void cancel();
   CalibrationUpdate update(bool pressed, const TouchPoint& point);
 
   bool active() const { return active_; }

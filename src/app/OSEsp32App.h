@@ -2,6 +2,8 @@
 
 #include "../diagnostics/DiagnosticsApp.h"
 #include "../kernel/SystemKernel.h"
+#include "../services/BootModeService.h"
+#include "../shell/DesktopShell.h"
 
 class OSEsp32App {
  public:
@@ -10,5 +12,8 @@ class OSEsp32App {
 
  private:
   SystemKernel kernel_;
+  BootModeService bootMode_;
+  DesktopShell shell_;
   DiagnosticsApp diagnostics_;
+  BootMode activeMode_ = BootMode::Shell;
 };

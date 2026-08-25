@@ -28,6 +28,15 @@ void TouchCalibrationService::start(bool ignoreUntilRelease) {
   events_->publish(SystemEventType::TouchCalibrationStarted);
 }
 
+void TouchCalibrationService::cancel() {
+  if (!active_) return;
+  active_ = false;
+  wasPressed_ = false;
+  resetSample();
+  logger_->warning("touch-cal", "calibration cancelled by user");
+  events_->publish(SystemEventType::TouchCalibrationCancelled);
+}
+
 int16_t TouchCalibrationService::targetX() const {
   const uint8_t index = pointIndex_ < POINT_COUNT ? pointIndex_ : POINT_COUNT - 1;
   return TARGET_X[index];
