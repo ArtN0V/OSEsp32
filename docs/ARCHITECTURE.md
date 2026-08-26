@@ -78,6 +78,10 @@ Stage 4; it must request storage work through the service instead of touching
 - Locale is selected before LVGL theme creation. A language change is persisted
   and followed by a controlled restart, avoiding a fragile live recreation of
   every label and keyboard object.
-- Russian builds use embedded 12/14-pixel ASCII+Cyrillic glyph subsets with
-  LVGL Montserrat fallbacks for its icon symbols. The recovery diagnostics UI
-  remains English and independent from the graphical shell locale.
+- Both languages use embedded compressed 12/14-pixel ASCII+Cyrillic glyph
+  subsets with LVGL Montserrat fallbacks for icon symbols. This ensures a
+  language's own name is readable before it is selected. The recovery
+  diagnostics UI remains English and independent from the graphical shell
+  locale.
+- The selected desktop gradient is a small NVS index. It remains independent
+  from wallpaper state and becomes visible whenever wallpaper is absent.

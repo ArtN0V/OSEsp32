@@ -16,6 +16,8 @@ class SystemSettingsService {
   bool loadWallpaper(char* path, size_t pathSize) const;
   bool saveWallpaper(const char* path) const;
   bool clearWallpaper() const;
+  uint8_t loadDesktopColor() const;
+  bool saveDesktopColor(uint8_t colorIndex) const;
   SystemLanguage loadLanguage() const;
   bool saveLanguage(SystemLanguage language) const;
 };

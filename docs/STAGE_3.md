@@ -59,7 +59,10 @@ and adds persistent desktop personalization.
      in NVS; restart after a change so the complete LVGL theme is rebuilt with
      the correct font.
    - Embed only ASCII and Cyrillic glyph ranges at 12 and 14 pixels, and use a
-     compact Russian keyboard map in Russian mode.
+     compact Russian keyboard map in Russian mode. Enable LVGL's compressed
+     font decoder because the generated glyph bitmaps use that format.
+   - Offer six persistent desktop gradients on a separate Display page; keep
+     them behind wallpaper rather than deleting wallpaper when color changes.
 
 ## Acceptance checks on the board
 
@@ -84,9 +87,12 @@ and adds persistent desktop personalization.
 8. On a clean NVS boot, confirm English is selected. Switch to Русский, allow
    the restart, inspect the desktop, Settings, Files, dialogs and all rows of
    the Cyrillic keyboard, then switch back to English.
+9. With wallpaper cleared, select every desktop color and restart on one of
+   them. Confirm the selection persists. Set wallpaper, change color, then
+   clear wallpaper and confirm the newly selected color appears.
 
 ## Exit criterion
 
-All eight checks pass without a crash, stuck SD mount, clipped keyboard row,
+All nine checks pass without a crash, stuck SD mount, clipped keyboard row,
 touch inversion or persistent heap loss. The `.yap` application runtime remains
 the explicit start of Stage 4.

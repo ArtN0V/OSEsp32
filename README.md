@@ -15,7 +15,8 @@ available as a recovery mode.
   uptime clock and foreground windows.
 - Paged SD file manager, built-in BMP/JPEG viewer and optimized desktop
   wallpapers.
-- Windows-style Settings list for display, language and touch options.
+- Windows-style Settings list for display, language and touch options,
+  including six persistent desktop color themes.
 - English interface by default plus persistent Russian localization and a
   Cyrillic on-screen keyboard.
 - Settings for brightness, touch calibration, wallpaper reset and persistent
@@ -123,6 +124,17 @@ apply the matching interface font everywhere. Russian mode also replaces the
 text keyboard with a compact Cyrillic layout; the `1#` key still opens the
 standard number/symbol page. Recovery hardware diagnostics intentionally stay
 in English so their output remains consistent with the Stage 0 test guide.
+
+The interface embeds one compressed ASCII+Cyrillic font family for both
+languages. This also allows the `Русский` choice to render correctly while the
+current interface is still English.
+
+### Desktop color
+
+Open **Settings → Display → Desktop Color** to choose Windows blue, Midnight,
+Teal, Plum, Slate or Forest. The selected gradient is saved immediately and is
+visible whenever wallpaper is disabled. Changing color does not delete the
+current wallpaper; use **Clear Wallpaper** to reveal it.
 
 ## Dependencies
 

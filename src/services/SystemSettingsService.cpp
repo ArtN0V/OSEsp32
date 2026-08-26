@@ -7,6 +7,7 @@ constexpr const char* NVS_NAMESPACE = "osesp32_cfg";
 constexpr const char* BRIGHTNESS_KEY = "brightness";
 constexpr const char* ROTATION_KEY = "rotate180";
 constexpr const char* WALLPAPER_KEY = "wallpaper";
+constexpr const char* DESKTOP_COLOR_KEY = "desk_color";
 constexpr const char* LANGUAGE_KEY = "language";
 constexpr uint8_t DEFAULT_BRIGHTNESS = 255;
 constexpr uint8_t MINIMUM_BRIGHTNESS = 25;
@@ -74,6 +75,23 @@ bool SystemSettingsService::clearWallpaper() const {
                        preferences.remove(WALLPAPER_KEY);
   preferences.end();
   return removed;
+}
+
+uint8_t SystemSettingsService::loadDesktopColor() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return 0;
+  const uint8_t value = preferences.getUChar(DESKTOP_COLOR_KEY, 0);
+  preferences.end();
+  return value;
+}
+
+bool SystemSettingsService::saveDesktopColor(uint8_t colorIndex) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool saved =
+      preferences.putUChar(DESKTOP_COLOR_KEY, colorIndex) == sizeof(uint8_t);
+  preferences.end();
+  return saved;
 }
 
 SystemLanguage SystemSettingsService::loadLanguage() const {

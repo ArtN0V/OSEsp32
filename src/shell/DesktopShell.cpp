@@ -22,6 +22,24 @@ constexpr int16_t WINDOW_Y = 5;
 constexpr int16_t WINDOW_WIDTH = 310;
 constexpr int16_t WINDOW_HEIGHT = 196;
 
+struct DesktopColorOption {
+  uint32_t top;
+  uint32_t bottom;
+  const char* english;
+  const char* russian;
+};
+
+constexpr DesktopColorOption DESKTOP_COLORS[] = {
+    {COLOR_DESKTOP_TOP, COLOR_DESKTOP_BOTTOM, "Windows blue", "Синий"},
+    {0x243447, 0x111827, "Midnight", "Ночной"},
+    {0x0F766E, 0x164E63, "Teal", "Бирюзовый"},
+    {0x5B3A70, 0x312E81, "Plum", "Сливовый"},
+    {0x475569, 0x1E293B, "Slate", "Серый"},
+    {0x3F6212, 0x14532D, "Forest", "Лесной"},
+};
+constexpr uint8_t DESKTOP_COLOR_COUNT =
+    sizeof(DESKTOP_COLORS) / sizeof(DESKTOP_COLORS[0]);
+
 const char* const RUSSIAN_KEYBOARD_LOWER[] = {
     "1#", "й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х",
     LV_SYMBOL_BACKSPACE, "\n",
@@ -79,6 +97,8 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   bootMode_ = &bootMode;
   rotation180_ = settings_.loadRotation180();
   language_ = settings_.loadLanguage();
+  desktopColor_ = settings_.loadDesktopColor();
+  if (desktopColor_ >= DESKTOP_COLOR_COUNT) desktopColor_ = 0;
   localization_.setLanguage(language_);
   if (!port_.begin(rotation180_, uiFont())) {
     kernel_->faults().report(FaultCode::InternalError, "shell",
@@ -231,11 +251,40 @@ lv_obj_t* DesktopShell::createSettingsRow(
   return row;
 }
 
+lv_obj_t* DesktopShell::createColorChoice(lv_obj_t* parent,
+                                          uint8_t colorIndex, int16_t x,
+                                          int16_t y) {
+  const DesktopColorOption& option = DESKTOP_COLORS[colorIndex];
+  lv_obj_t* choice = lv_button_create(parent);
+  lv_obj_set_pos(choice, x, y);
+  lv_obj_set_size(choice, 92, 44);
+  lv_obj_set_style_bg_color(choice, lv_color_hex(option.top), 0);
+  lv_obj_set_style_bg_grad_color(choice, lv_color_hex(option.bottom), 0);
+  lv_obj_set_style_bg_grad_dir(choice, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_radius(choice, 3, 0);
+  lv_obj_set_style_border_width(choice,
+                                desktopColor_ == colorIndex ? 3 : 1, 0);
+  lv_obj_set_style_border_color(
+      choice,
+      lv_color_hex(desktopColor_ == colorIndex ? 0xFFFFFF : 0xAAB2BA), 0);
+  lv_obj_set_style_pad_all(choice, 2, 0);
+  lv_obj_add_event_cb(
+      choice, desktopColorEvent, LV_EVENT_CLICKED,
+      reinterpret_cast<void*>(static_cast<uintptr_t>(colorIndex)));
+
+  lv_obj_t* label = lv_label_create(choice);
+  lv_label_set_text(label, tr(option.english, option.russian));
+  lv_obj_set_style_text_font(label, uiSmallFont(), 0);
+  lv_obj_set_style_text_color(label, lv_color_white(), 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(label);
+  return choice;
+}
+
 void DesktopShell::buildDesktop() {
   screen_ = lv_screen_active();
   configurePanel(screen_, COLOR_DESKTOP_TOP);
-  lv_obj_set_style_bg_grad_color(screen_, lv_color_hex(COLOR_DESKTOP_BOTTOM), 0);
-  lv_obj_set_style_bg_grad_dir(screen_, LV_GRAD_DIR_VER, 0);
+  applyDesktopColor();
   applyWallpaper();
 
   lv_obj_t* brand = lv_label_create(screen_);
@@ -251,13 +300,6 @@ void DesktopShell::buildDesktop() {
                         ShellAppId::SystemInfo);
   createDesktopShortcut(LV_SYMBOL_KEYBOARD, tr("Text\nInput", "Ввод\nтекста"), 0xE9EEF2, 227, 28,
                         ShellAppId::TextInput);
-
-  lv_obj_t* hint = lv_label_create(screen_);
-  lv_label_set_text(hint, tr("Touch Start to open applications",
-                             "Нажмите Пуск для выбора программы"));
-  lv_obj_set_style_text_font(hint, uiSmallFont(), 0);
-  lv_obj_set_pos(hint, 12, 176);
-  lv_obj_set_style_text_color(hint, lv_color_hex(0xD9F2FF), 0);
 
   buildTaskbar();
   buildStartMenu();
@@ -540,8 +582,27 @@ void DesktopShell::openDisplaySettings() {
                rotation180_ ? tr("ROTATE TO 0", "ПОВЕРНУТЬ НА 0")
                             : tr("ROTATE TO 180", "ПОВЕРНУТЬ НА 180"),
                10, 75, 286, 32, rotationEvent);
+  createButton(content, tr("DESKTOP COLOR", "ЦВЕТ СТОЛА"),
+               10, 116, 138, 32, desktopColorSettingsEvent);
   createButton(content, tr("CLEAR WALLPAPER", "УБРАТЬ ОБОИ"),
-               10, 116, 286, 32, clearWallpaperEvent);
+               157, 116, 139, 32, clearWallpaperEvent);
+}
+
+void DesktopShell::openDesktopColorSettings() {
+  lv_obj_t* content = createWindow(tr("Desktop color", "Цвет рабочего стола"));
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsDisplayEvent);
+  lv_obj_t* note = lv_label_create(content);
+  lv_label_set_text(note, tr("Used when wallpaper is off",
+                             "Виден, когда обои отключены"));
+  lv_obj_set_style_text_font(note, uiSmallFont(), 0);
+  lv_obj_set_pos(note, 77, 10);
+
+  for (uint8_t index = 0; index < DESKTOP_COLOR_COUNT; ++index) {
+    const int16_t x = 5 + (index % 3) * 99;
+    const int16_t y = 39 + (index / 3) * 53;
+    createColorChoice(content, index, x, y);
+  }
 }
 
 void DesktopShell::openLanguageSettings() {
@@ -718,6 +779,15 @@ void DesktopShell::removeWallpaper() {
   }
 }
 
+void DesktopShell::applyDesktopColor() {
+  if (!screen_) return;
+  const DesktopColorOption& option = DESKTOP_COLORS[desktopColor_];
+  lv_obj_set_style_bg_color(screen_, lv_color_hex(option.top), 0);
+  lv_obj_set_style_bg_grad_color(screen_, lv_color_hex(option.bottom), 0);
+  lv_obj_set_style_bg_grad_dir(screen_, LV_GRAD_DIR_VER, 0);
+  lv_obj_invalidate(screen_);
+}
+
 void DesktopShell::parentDirectory() {
   if (!strcmp(currentPath_, "/")) return;
   char* slash = strrchr(currentPath_, '/');
@@ -886,6 +956,26 @@ void DesktopShell::rotationEvent(lv_event_t*) {
   active_->setTaskText(active_->tr("Applying rotation...", "Применение поворота..."));
   delay(150);
   ESP.restart();
+}
+
+void DesktopShell::desktopColorSettingsEvent(lv_event_t*) {
+  active_->openDesktopColorSettings();
+}
+
+void DesktopShell::desktopColorEvent(lv_event_t* event) {
+  const uint8_t colorIndex = static_cast<uint8_t>(
+      reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  if (colorIndex >= DESKTOP_COLOR_COUNT) return;
+  if (!active_->settings_.saveDesktopColor(colorIndex)) {
+    active_->showInfoDialog(active_->tr("Could not save desktop color.",
+                                        "Не удалось сохранить цвет."));
+    return;
+  }
+  active_->desktopColor_ = colorIndex;
+  active_->applyDesktopColor();
+  active_->openDesktopColorSettings();
+  active_->setTaskText(active_->tr("Desktop color saved",
+                                   "Цвет рабочего стола сохранён"));
 }
 
 void DesktopShell::settingsDisplayEvent(lv_event_t*) {

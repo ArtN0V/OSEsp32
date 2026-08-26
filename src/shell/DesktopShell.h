@@ -52,6 +52,7 @@ class DesktopShell {
   bool calibrationPreviousPressed_ = false;
   bool rotation180_ = false;
   SystemLanguage language_ = SystemLanguage::English;
+  uint8_t desktopColor_ = 0;
   bool previousStorageMounted_ = false;
   StorageEntry fileEntries_[StorageService::PAGE_ENTRIES];
   uint8_t fileEntryCount_ = 0;
@@ -76,6 +77,8 @@ class DesktopShell {
   lv_obj_t* createSettingsRow(lv_obj_t* parent, const char* icon,
                               const char* title, const char* summary,
                               int16_t y, lv_event_cb_t callback);
+  lv_obj_t* createColorChoice(lv_obj_t* parent, uint8_t colorIndex,
+                              int16_t x, int16_t y);
   lv_obj_t* createWindow(const char* title);
   void closeWindow();
   void closeDialog();
@@ -86,6 +89,7 @@ class DesktopShell {
   void openImage(const char* path);
   void openSettings();
   void openDisplaySettings();
+  void openDesktopColorSettings();
   void openLanguageSettings();
   void openTouchSettings();
   void openSystemInfo();
@@ -95,17 +99,16 @@ class DesktopShell {
   void setTaskText(const char* text);
   void applyWallpaper();
   void removeWallpaper();
+  void applyDesktopColor();
   void parentDirectory();
   const char* tr(const char* english, const char* russian) const {
     return localization_.text(english, russian);
   }
   const lv_font_t* uiFont() const {
-    return language_ == SystemLanguage::Russian ? &osesp32_font_14
-                                                : &lv_font_montserrat_14;
+    return &osesp32_font_14;
   }
   const lv_font_t* uiSmallFont() const {
-    return language_ == SystemLanguage::Russian ? &osesp32_font_12
-                                                : &lv_font_montserrat_12;
+    return &osesp32_font_12;
   }
 
   void startCalibration(bool ignoreCurrentPress);
@@ -120,6 +123,8 @@ class DesktopShell {
   static void brightnessEvent(lv_event_t* event);
   static void brightnessSaveEvent(lv_event_t* event);
   static void rotationEvent(lv_event_t* event);
+  static void desktopColorSettingsEvent(lv_event_t* event);
+  static void desktopColorEvent(lv_event_t* event);
   static void settingsDisplayEvent(lv_event_t* event);
   static void settingsLanguageEvent(lv_event_t* event);
   static void settingsTouchEvent(lv_event_t* event);
