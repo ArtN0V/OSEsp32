@@ -21,9 +21,10 @@ taskbar, Start menu, dialogs and touch keyboard.
 
 Build serialized SD service, file manager, file associations, application data
 directories and safe behavior when a card is removed or damaged. Add streamed
-BMP/JPEG viewing, SD-backed desktop wallpaper and persistent 0/180-degree
-display rotation. Keep PNG and image scaling out of the first version because
-this board has no PSRAM.
+BMP/JPEG viewing, preprocessed strip-cached desktop wallpaper, persistent
+0/180-degree display rotation, a Windows-style Settings category list and
+English/Russian localization. Keep PNG and image scaling out of the first
+version because this board has no PSRAM.
 
 ## Stage 4 — application runtime
 

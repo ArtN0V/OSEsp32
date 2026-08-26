@@ -26,13 +26,19 @@ and adds persistent desktop personalization.
    - Associate BMP/JPG/JPEG with the built-in viewer; report unsupported types
      instead of attempting to execute them.
 
-4. **Image viewer and wallpaper**
+4. **Image viewer and optimized wallpaper**
    - Enable LVGL's incremental BMP and TJPGD decoders.
    - Center native-size images in the viewer and clip oversized images.
-   - Save only the chosen path in NVS and stream wallpaper pixels from SD.
+   - Convert a chosen image once into the fixed 320x204 RGB565 `OWP1`
+     wallpaper format without modifying its source file.
+   - Read the OWP file in 20-line strips and keep a two-strip LRU cache
+     (about 25 KiB) so opening and closing windows does not repeatedly decode
+     BMP/JPEG or reread the entire desktop.
+   - Migrate an older path-based wallpaper automatically on first load.
    - Remove the wallpaper safely when the card is unavailable.
-   - Recommend lowercase extensions and 320x204 wallpapers. Scaling and PNG
-     remain deferred until heap measurements prove them safe.
+   - Normalize extension case for LVGL, accept baseline JPEG and recommend
+     320x204 wallpapers. Progressive JPEG, scaling and PNG remain deferred
+     until heap measurements prove them safe.
 
 5. **Rotation and calibration**
    - Save orientation in NVS and restart after a setting change.
@@ -46,6 +52,15 @@ and adds persistent desktop personalization.
    - Reduce key padding and use the 12-pixel font so every keyboard row remains
      visible and touchable.
 
+7. **Settings and localization**
+   - Replace the flat group of setting buttons with a Windows-style category
+     list and separate Display, Language and Touch pages.
+   - Keep English as the first-boot default and persist English/Russian choice
+     in NVS; restart after a change so the complete LVGL theme is rebuilt with
+     the correct font.
+   - Embed only ASCII and Cyrillic glyph ranges at 12 and 14 pixels, and use a
+     compact Russian keyboard map in Russian mode.
+
 ## Acceptance checks on the board
 
 1. Open Text Input and confirm every row, including space/Enter and mode keys,
@@ -54,17 +69,24 @@ and adds persistent desktop personalization.
    unavailable message.
 3. Insert a FAT32 SD, wait up to three seconds, reopen Files and navigate a
    folder containing more than four entries using both page buttons.
-4. Open lowercase BMP, JPG and JPEG samples. Repeat several times and confirm
-   System Info does not show steadily decreasing minimum usable heap.
-5. Set a 320x204 image as wallpaper, restart and confirm it returns. Remove the
-   card and confirm the shell remains usable and the wallpaper disappears.
+4. Open BMP, `.jpg`, `.JPG`, `.jpeg` and `.JPEG` baseline samples. Repeat
+   several times and confirm System Info does not show steadily decreasing
+   minimum usable heap.
+5. Set BMP and JPEG images of different sizes as wallpaper. Confirm the source
+   files remain unchanged and `desktop.owp` appears under Wallpapers. Open and
+   close windows repeatedly; redraws should stay responsive. Restart and
+   confirm the wallpaper returns. Remove/reinsert the card and confirm there
+   are no stale strips from the previous image.
 6. Select Rotate to 180, allow restart, and verify all four screen corners and
    the keyboard. Rotate back to 0 and repeat.
 7. Run touch calibration in the rotated orientation, restart, then verify touch
    at both orientations without recalibrating.
+8. On a clean NVS boot, confirm English is selected. Switch to Русский, allow
+   the restart, inspect the desktop, Settings, Files, dialogs and all rows of
+   the Cyrillic keyboard, then switch back to English.
 
 ## Exit criterion
 
-All seven checks pass without a crash, stuck SD mount, clipped keyboard row,
+All eight checks pass without a crash, stuck SD mount, clipped keyboard row,
 touch inversion or persistent heap loss. The `.yap` application runtime remains
 the explicit start of Stage 4.

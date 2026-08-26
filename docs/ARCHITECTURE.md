@@ -60,9 +60,24 @@ Stage 4; it must request storage work through the service instead of touching
 ## Stage 3 image policy
 
 - The LVGL `S:` filesystem driver is the only UI-facing path to SD assets.
-- BMP and JPEG are decoded incrementally; images are not copied into a full
-  screen framebuffer.
-- The first wallpaper implementation uses native pixels, centered and clipped
-  to the 320x204 desktop area. A 320x204 image gives a predictable result.
+- BMP and baseline JPEG are decoded incrementally in the viewer; images are
+  not copied into a full-screen framebuffer.
+- Setting wallpaper is a one-time preprocessing operation. It center-crops or
+  pads the source into `/OSEsp32/Wallpapers/desktop.owp`, whose packed `OWP1`
+  header is followed by exactly 320x204 RGB565 pixels.
+- The OWP decoder serves 20-line areas from SD and retains two strips in RAM.
+  Windows therefore restore a ready-to-draw background instead of invoking a
+  costly JPEG/BMP decoder on every invalidation.
 - PNG and arbitrary resampling are deferred until their heap cost is measured.
-- Wallpaper paths and rotation live in NVS; image bytes remain on SD.
+- The active OWP path, rotation and interface language live in NVS; image bytes
+  remain on SD.
+
+## Stage 3 localization policy
+
+- English is the stable default and Russian is the first optional language.
+- Locale is selected before LVGL theme creation. A language change is persisted
+  and followed by a controlled restart, avoiding a fragile live recreation of
+  every label and keyboard object.
+- Russian builds use embedded 12/14-pixel ASCII+Cyrillic glyph subsets with
+  LVGL Montserrat fallbacks for its icon symbols. The recovery diagnostics UI
+  remains English and independent from the graphical shell locale.

@@ -11,7 +11,8 @@ class LvglPort {
  public:
   static constexpr uint16_t DRAW_LINES = 20;
 
-  bool begin(bool rotation180 = false);
+  bool begin(bool rotation180 = false,
+             const lv_font_t* interfaceFont = &lv_font_montserrat_14);
   void update();
   void suspendPointer(bool suspended) { pointerSuspended_ = suspended; }
 

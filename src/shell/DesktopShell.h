@@ -5,10 +5,13 @@
 
 #include "../kernel/SystemKernel.h"
 #include "../services/BootModeService.h"
+#include "../services/LocalizationService.h"
 #include "../services/SystemSettingsService.h"
 #include "../services/StorageService.h"
 #include "../services/TouchCalibrationService.h"
+#include "../services/WallpaperService.h"
 #include "../ui/LvglPort.h"
+#include "../ui/OSEsp32Font.h"
 
 enum class ShellAppId : uint8_t {
   Files,
@@ -29,7 +32,9 @@ class DesktopShell {
   SystemKernel* kernel_ = nullptr;
   BootModeService* bootMode_ = nullptr;
   SystemSettingsService settings_;
+  LocalizationService localization_;
   StorageService storage_;
+  WallpaperService wallpaperService_;
   LvglPort port_;
   TouchCalibrationService calibration_;
 
@@ -46,6 +51,7 @@ class DesktopShell {
   lv_obj_t* calibrationProgress_ = nullptr;
   bool calibrationPreviousPressed_ = false;
   bool rotation180_ = false;
+  SystemLanguage language_ = SystemLanguage::English;
   bool previousStorageMounted_ = false;
   StorageEntry fileEntries_[StorageService::PAGE_ENTRIES];
   uint8_t fileEntryCount_ = 0;
@@ -64,6 +70,12 @@ class DesktopShell {
   lv_obj_t* createButton(lv_obj_t* parent, const char* text, int16_t x,
                          int16_t y, int16_t width, int16_t height,
                          lv_event_cb_t callback, void* userData = nullptr);
+  lv_obj_t* createDesktopShortcut(const char* icon, const char* text,
+                                  uint32_t iconColor, int16_t x, int16_t y,
+                                  ShellAppId app);
+  lv_obj_t* createSettingsRow(lv_obj_t* parent, const char* icon,
+                              const char* title, const char* summary,
+                              int16_t y, lv_event_cb_t callback);
   lv_obj_t* createWindow(const char* title);
   void closeWindow();
   void closeDialog();
@@ -73,6 +85,9 @@ class DesktopShell {
   void openFiles();
   void openImage(const char* path);
   void openSettings();
+  void openDisplaySettings();
+  void openLanguageSettings();
+  void openTouchSettings();
   void openSystemInfo();
   void openTextInput();
   void openAbout();
@@ -81,6 +96,17 @@ class DesktopShell {
   void applyWallpaper();
   void removeWallpaper();
   void parentDirectory();
+  const char* tr(const char* english, const char* russian) const {
+    return localization_.text(english, russian);
+  }
+  const lv_font_t* uiFont() const {
+    return language_ == SystemLanguage::Russian ? &osesp32_font_14
+                                                : &lv_font_montserrat_14;
+  }
+  const lv_font_t* uiSmallFont() const {
+    return language_ == SystemLanguage::Russian ? &osesp32_font_12
+                                                : &lv_font_montserrat_12;
+  }
 
   void startCalibration(bool ignoreCurrentPress);
   void updateCalibration();
@@ -94,6 +120,12 @@ class DesktopShell {
   static void brightnessEvent(lv_event_t* event);
   static void brightnessSaveEvent(lv_event_t* event);
   static void rotationEvent(lv_event_t* event);
+  static void settingsDisplayEvent(lv_event_t* event);
+  static void settingsLanguageEvent(lv_event_t* event);
+  static void settingsTouchEvent(lv_event_t* event);
+  static void settingsBackEvent(lv_event_t* event);
+  static void languageEnglishEvent(lv_event_t* event);
+  static void languageRussianEvent(lv_event_t* event);
   static void calibrateEvent(lv_event_t* event);
   static void resetCalibrationEvent(lv_event_t* event);
   static void diagnosticsEvent(lv_event_t* event);

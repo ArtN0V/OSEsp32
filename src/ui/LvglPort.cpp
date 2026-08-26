@@ -1,6 +1,6 @@
 #include "LvglPort.h"
 
-bool LvglPort::begin(bool rotation180) {
+bool LvglPort::begin(bool rotation180, const lv_font_t* interfaceFont) {
   rotation180_ = rotation180;
   if (!displayDriver_.begin()) return false;
   if (rotation180_) displayDriver_.setRotation(3);
@@ -27,7 +27,7 @@ bool LvglPort::begin(bool rotation180) {
 
   lv_theme_t* theme = lv_theme_default_init(
       lvDisplay_, lv_color_hex(0x0078D4), lv_color_hex(0x38A169), false,
-      &lv_font_montserrat_14);
+      interfaceFont ? interfaceFont : &lv_font_montserrat_14);
   lv_display_set_theme(lvDisplay_, theme);
   return true;
 }

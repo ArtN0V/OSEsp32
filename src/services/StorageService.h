@@ -27,6 +27,8 @@ class StorageService {
                          StorageEntry* entries, uint8_t capacity,
                          uint8_t& count, uint16_t& totalCount);
   bool exists(const char* path) const;
+  bool removePath(const char* path);
+  bool renamePath(const char* from, const char* to);
   bool mounted() const { return mounted_; }
   static bool isImagePath(const char* path);
   static bool makeLvglPath(const char* sdPath, char* output, size_t outputSize);

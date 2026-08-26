@@ -7,6 +7,7 @@ constexpr const char* NVS_NAMESPACE = "osesp32_cfg";
 constexpr const char* BRIGHTNESS_KEY = "brightness";
 constexpr const char* ROTATION_KEY = "rotate180";
 constexpr const char* WALLPAPER_KEY = "wallpaper";
+constexpr const char* LANGUAGE_KEY = "language";
 constexpr uint8_t DEFAULT_BRIGHTNESS = 255;
 constexpr uint8_t MINIMUM_BRIGHTNESS = 25;
 }
@@ -73,4 +74,24 @@ bool SystemSettingsService::clearWallpaper() const {
                        preferences.remove(WALLPAPER_KEY);
   preferences.end();
   return removed;
+}
+
+SystemLanguage SystemSettingsService::loadLanguage() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return SystemLanguage::English;
+  const uint8_t value = preferences.getUChar(
+      LANGUAGE_KEY, static_cast<uint8_t>(SystemLanguage::English));
+  preferences.end();
+  return value == static_cast<uint8_t>(SystemLanguage::Russian)
+             ? SystemLanguage::Russian
+             : SystemLanguage::English;
+}
+
+bool SystemSettingsService::saveLanguage(SystemLanguage language) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool saved = preferences.putUChar(LANGUAGE_KEY,
+      static_cast<uint8_t>(language)) == sizeof(uint8_t);
+  preferences.end();
+  return saved;
 }

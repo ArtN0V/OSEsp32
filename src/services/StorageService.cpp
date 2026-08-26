@@ -114,6 +114,16 @@ bool StorageService::exists(const char* path) const {
   return mounted_ && path && SD.exists(path);
 }
 
+bool StorageService::removePath(const char* path) {
+  return mounted_ && path && (!SD.exists(path) || SD.remove(path));
+}
+
+bool StorageService::renamePath(const char* from, const char* to) {
+  if (!mounted_ || !from || !to || !SD.exists(from)) return false;
+  if (SD.exists(to) && !SD.remove(to)) return false;
+  return SD.rename(from, to);
+}
+
 bool StorageService::isImagePath(const char* path) {
   if (!path) return false;
   const char* extension = strrchr(path, '.');
@@ -127,7 +137,19 @@ bool StorageService::makeLvglPath(const char* sdPath, char* output,
   if (!sdPath || !output || outputSize < 4) return false;
   const int written = snprintf(output, outputSize, "S:%s%s",
                                sdPath[0] == '/' ? "" : "/", sdPath);
-  return written > 0 && static_cast<size_t>(written) < outputSize;
+  if (written <= 0 || static_cast<size_t>(written) >= outputSize) return false;
+
+  // LVGL's built-in BMP and TJPGD decoders compare extensions
+  // case-sensitively. FAT paths are case-insensitive, so normalize only the
+  // extension presented to LVGL while preserving the stored SD path.
+  char* extension = strrchr(output, '.');
+  if (extension) {
+    for (char* character = extension + 1; *character; ++character) {
+      if (*character >= 'A' && *character <= 'Z')
+        *character = static_cast<char>(*character - 'A' + 'a');
+    }
+  }
+  return true;
 }
 
 void StorageService::registerLvglDriver() {

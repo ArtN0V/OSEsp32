@@ -11,9 +11,13 @@ available as a recovery mode.
 
 ## Current capabilities
 
-- Windows-inspired desktop, taskbar, Start menu, uptime clock and foreground
-  windows.
-- Paged SD file manager, built-in BMP/JPEG viewer and desktop wallpapers.
+- Windows-inspired desktop with icon-style shortcuts, taskbar, Start menu,
+  uptime clock and foreground windows.
+- Paged SD file manager, built-in BMP/JPEG viewer and optimized desktop
+  wallpapers.
+- Windows-style Settings list for display, language and touch options.
+- English interface by default plus persistent Russian localization and a
+  Cyrillic on-screen keyboard.
 - Settings for brightness, touch calibration, wallpaper reset and persistent
   0/180-degree screen rotation.
 - Compact on-screen keyboard and partial LVGL rendering without a full
@@ -92,16 +96,33 @@ Monitor to discard the saved values and return to board defaults.
 
 ### Images, wallpaper and rotation
 
-Open **Files** and select a `.bmp`, `.jpg` or `.jpeg` file to view it. Use
-lowercase filename extensions for compatibility with the lightweight LVGL
-decoders. The **SET WALLPAPER** button stores only the SD path in NVS, so the
-card and file must remain available. Wallpapers are centered without scaling;
-use **320x204** pixels for an exact fit above the taskbar. Settings can clear
-the wallpaper.
+Open **Files** and select a `.bmp`, `.jpg` or `.jpeg` file to view it. Extension
+case does not matter, so camera-style `.JPG` files work too. The lightweight
+decoder supports baseline JPEG; progressive JPEG must first be exported as
+baseline.
+
+**SET WALLPAPER** performs a one-time conversion to
+`/OSEsp32/Wallpapers/desktop.owp`: a fixed 320x204 RGB565 file of about 128 KiB.
+Large images are center-cropped and small images are centered on a solid fill;
+the original file is not changed. During normal drawing, OSEsp32 reads only
+the required 20-line strips and keeps the two most recent strips in a roughly
+25 KiB RAM cache. This combines fast window redraws with bounded memory use on
+the no-PSRAM board. A wallpaper saved by an older build is converted
+automatically on its first successful load. The SD card must remain inserted;
+Settings can clear the optimized wallpaper.
 
 Settings also offers **ROTATE TO 180** / **ROTATE TO 0**. The choice is saved
 and the board restarts so the display and touch transform change together.
 Touch calibration remains valid across the two orientations.
+
+### Interface language
+
+Open **Settings → Language** and choose **English** or **Русский**. English is
+the first-boot default. The choice is stored in NVS and OSEsp32 restarts to
+apply the matching interface font everywhere. Russian mode also replaces the
+text keyboard with a compact Cyrillic layout; the `1#` key still opens the
+standard number/symbol page. Recovery hardware diagnostics intentionally stay
+in English so their output remains consistent with the Stage 0 test guide.
 
 ## Dependencies
 
@@ -112,6 +133,10 @@ Required now:
 - LVGL 9.5.0
 - Built-in `SPI`, `FS` and `SD` libraries from Arduino-ESP32
 - Built-in `Preferences` for calibration and one-shot boot settings
+
+The generated Cyrillic glyph data in `src/ui/OSEsp32Font12.c` and
+`src/ui/OSEsp32Font14.c` is derived from Noto Sans, distributed under the
+Apache License 2.0. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
 Planned for later stages:
 

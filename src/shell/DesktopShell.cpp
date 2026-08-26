@@ -1,5 +1,7 @@
 #include "DesktopShell.h"
 
+#include <strings.h>
+
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
@@ -20,6 +22,45 @@ constexpr int16_t WINDOW_Y = 5;
 constexpr int16_t WINDOW_WIDTH = 310;
 constexpr int16_t WINDOW_HEIGHT = 196;
 
+const char* const RUSSIAN_KEYBOARD_LOWER[] = {
+    "1#", "й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х",
+    LV_SYMBOL_BACKSPACE, "\n",
+    "ABC", "ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э", "\n",
+    "я", "ч", "с", "м", "и", "т", "ь", "б", "ю", ".", ",", "\n",
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+const char* const RUSSIAN_KEYBOARD_UPPER[] = {
+    "1#", "Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х",
+    LV_SYMBOL_BACKSPACE, "\n",
+    "abc", "Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э", "\n",
+    "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", ".", ",", "\n",
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
+
+const lv_buttonmatrix_ctrl_t RUSSIAN_KEYBOARD_CONTROLS[] = {
+    LV_BUTTONMATRIX_CTRL_WIDTH_2,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_2,
+    LV_BUTTONMATRIX_CTRL_WIDTH_2,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_1,
+    LV_BUTTONMATRIX_CTRL_WIDTH_2, LV_BUTTONMATRIX_CTRL_WIDTH_2,
+    LV_BUTTONMATRIX_CTRL_WIDTH_6, LV_BUTTONMATRIX_CTRL_WIDTH_2,
+    LV_BUTTONMATRIX_CTRL_WIDTH_2};
+
 void configurePanel(lv_obj_t* object, uint32_t color, int radius = 0) {
   lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
   lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0);
@@ -37,7 +78,9 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   kernel_ = &kernel;
   bootMode_ = &bootMode;
   rotation180_ = settings_.loadRotation180();
-  if (!port_.begin(rotation180_)) {
+  language_ = settings_.loadLanguage();
+  localization_.setLanguage(language_);
+  if (!port_.begin(rotation180_, uiFont())) {
     kernel_->faults().report(FaultCode::InternalError, "shell",
                              "LVGL port initialization failed");
     return false;
@@ -45,6 +88,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
 
   storage_.begin(kernel_->events(), kernel_->logger());
   storage_.registerLvglDriver();
+  wallpaperService_.begin(storage_, kernel_->logger());
   previousStorageMounted_ = storage_.mounted();
   calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger(),
                      rotation180_);
@@ -65,12 +109,13 @@ void DesktopShell::update() {
   storage_.update();
   if (storage_.mounted() != previousStorageMounted_) {
     previousStorageMounted_ = storage_.mounted();
+    wallpaperService_.invalidateCache();
     if (previousStorageMounted_)
       applyWallpaper();
     else {
       closeWindow();
       removeWallpaper();
-      setTaskText("SD card removed");
+      setTaskText(tr("SD card removed", "SD-карта извлечена"));
     }
   }
   if (calibration_.active()) updateCalibration();
@@ -99,6 +144,93 @@ lv_obj_t* DesktopShell::createButton(lv_obj_t* parent, const char* text,
   return button;
 }
 
+lv_obj_t* DesktopShell::createDesktopShortcut(const char* icon,
+                                               const char* text,
+                                               uint32_t iconColor, int16_t x,
+                                               int16_t y, ShellAppId app) {
+  lv_obj_t* shortcut = lv_button_create(screen_);
+  lv_obj_set_pos(shortcut, x, y);
+  lv_obj_set_size(shortcut, 68, 72);
+  lv_obj_set_style_bg_opa(shortcut, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_color(shortcut, lv_color_hex(0xB8E3FF),
+                            LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(shortcut, LV_OPA_40, LV_STATE_PRESSED);
+  lv_obj_set_style_border_width(shortcut, 0, 0);
+  lv_obj_set_style_shadow_width(shortcut, 0, 0);
+  lv_obj_set_style_radius(shortcut, 2, 0);
+  lv_obj_set_style_pad_all(shortcut, 0, 0);
+  lv_obj_add_event_cb(
+      shortcut, appButtonEvent, LV_EVENT_CLICKED,
+      reinterpret_cast<void*>(static_cast<uintptr_t>(app)));
+
+  lv_obj_t* iconLabel = lv_label_create(shortcut);
+  lv_label_set_text(iconLabel, icon);
+  lv_obj_set_style_text_font(iconLabel, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_color(iconLabel, lv_color_hex(iconColor), 0);
+  lv_obj_set_pos(iconLabel, 0, 3);
+  lv_obj_set_width(iconLabel, 68);
+  lv_obj_set_style_text_align(iconLabel, LV_TEXT_ALIGN_CENTER, 0);
+
+  lv_obj_t* textShadow = lv_label_create(shortcut);
+  lv_label_set_text(textShadow, text);
+  lv_obj_set_style_text_font(textShadow, uiSmallFont(), 0);
+  lv_obj_set_style_text_color(textShadow, lv_color_black(), 0);
+  lv_obj_set_style_text_opa(textShadow, LV_OPA_70, 0);
+  lv_obj_set_style_text_align(textShadow, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(textShadow, 2, 41);
+  lv_obj_set_width(textShadow, 66);
+
+  lv_obj_t* textLabel = lv_label_create(shortcut);
+  lv_label_set_text(textLabel, text);
+  lv_obj_set_style_text_font(textLabel, uiSmallFont(), 0);
+  lv_obj_set_style_text_color(textLabel, lv_color_white(), 0);
+  lv_obj_set_style_text_align(textLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_pos(textLabel, 1, 40);
+  lv_obj_set_width(textLabel, 66);
+  return shortcut;
+}
+
+lv_obj_t* DesktopShell::createSettingsRow(
+    lv_obj_t* parent, const char* icon, const char* title, const char* summary,
+    int16_t y, lv_event_cb_t callback) {
+  lv_obj_t* row = lv_button_create(parent);
+  lv_obj_set_pos(row, 5, y);
+  lv_obj_set_size(row, 296, 48);
+  lv_obj_set_style_bg_color(row, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_bg_color(row, lv_color_hex(0xDDEEFF), LV_STATE_PRESSED);
+  lv_obj_set_style_border_width(row, 1, 0);
+  lv_obj_set_style_border_color(row, lv_color_hex(0xD0D5DA), 0);
+  lv_obj_set_style_radius(row, 0, 0);
+  lv_obj_set_style_pad_all(row, 0, 0);
+  lv_obj_add_event_cb(row, callback, LV_EVENT_CLICKED, nullptr);
+
+  lv_obj_t* iconLabel = lv_label_create(row);
+  lv_label_set_text(iconLabel, icon);
+  lv_obj_set_style_text_color(iconLabel, lv_color_hex(COLOR_ACCENT), 0);
+  lv_obj_set_pos(iconLabel, 10, 15);
+  lv_obj_set_width(iconLabel, 26);
+  lv_obj_set_style_text_align(iconLabel, LV_TEXT_ALIGN_CENTER, 0);
+
+  lv_obj_t* titleLabel = lv_label_create(row);
+  lv_label_set_text(titleLabel, title);
+  lv_obj_set_pos(titleLabel, 45, 5);
+  lv_obj_set_style_text_color(titleLabel, lv_color_hex(0x202020), 0);
+
+  lv_obj_t* summaryLabel = lv_label_create(row);
+  lv_label_set_text(summaryLabel, summary);
+  lv_obj_set_pos(summaryLabel, 45, 25);
+  lv_obj_set_width(summaryLabel, 218);
+  lv_label_set_long_mode(summaryLabel, LV_LABEL_LONG_DOT);
+  lv_obj_set_style_text_font(summaryLabel, uiSmallFont(), 0);
+  lv_obj_set_style_text_color(summaryLabel, lv_color_hex(0x60666C), 0);
+
+  lv_obj_t* arrow = lv_label_create(row);
+  lv_label_set_text(arrow, LV_SYMBOL_RIGHT);
+  lv_obj_set_pos(arrow, 274, 15);
+  lv_obj_set_style_text_color(arrow, lv_color_hex(0x60666C), 0);
+  return row;
+}
+
 void DesktopShell::buildDesktop() {
   screen_ = lv_screen_active();
   configurePanel(screen_, COLOR_DESKTOP_TOP);
@@ -111,17 +243,19 @@ void DesktopShell::buildDesktop() {
   lv_obj_set_pos(brand, 218, 8);
   lv_obj_set_style_text_color(brand, lv_color_hex(0xBFE9FF), 0);
 
-  createButton(screen_, "FILES", 12, 30, 72, 48, appButtonEvent,
-               reinterpret_cast<void*>(static_cast<uintptr_t>(ShellAppId::Files)));
-  createButton(screen_, "SETTINGS", 94, 30, 84, 48, appButtonEvent,
-               reinterpret_cast<void*>(static_cast<uintptr_t>(ShellAppId::Settings)));
-  createButton(screen_, "SYSTEM\nINFO", 12, 88, 72, 48, appButtonEvent,
-               reinterpret_cast<void*>(static_cast<uintptr_t>(ShellAppId::SystemInfo)));
-  createButton(screen_, "TEXT\nINPUT", 94, 88, 84, 48, appButtonEvent,
-               reinterpret_cast<void*>(static_cast<uintptr_t>(ShellAppId::TextInput)));
+  createDesktopShortcut(LV_SYMBOL_DIRECTORY, tr("Files", "Файлы"), 0xFFD45A, 5, 28,
+                        ShellAppId::Files);
+  createDesktopShortcut(LV_SYMBOL_SETTINGS, tr("Settings", "Настройки"), 0xE9EEF2, 79, 28,
+                        ShellAppId::Settings);
+  createDesktopShortcut(LV_SYMBOL_LIST, tr("System\nInfo", "Сведения"), 0x79D1FF, 153, 28,
+                        ShellAppId::SystemInfo);
+  createDesktopShortcut(LV_SYMBOL_KEYBOARD, tr("Text\nInput", "Ввод\nтекста"), 0xE9EEF2, 227, 28,
+                        ShellAppId::TextInput);
 
   lv_obj_t* hint = lv_label_create(screen_);
-  lv_label_set_text(hint, "Touch Start to open applications");
+  lv_label_set_text(hint, tr("Touch Start to open applications",
+                             "Нажмите Пуск для выбора программы"));
+  lv_obj_set_style_text_font(hint, uiSmallFont(), 0);
   lv_obj_set_pos(hint, 12, 176);
   lv_obj_set_style_text_color(hint, lv_color_hex(0xD9F2FF), 0);
 
@@ -136,9 +270,9 @@ void DesktopShell::buildTaskbar() {
   lv_obj_set_size(taskbar, board::SCREEN_WIDTH, TASKBAR_HEIGHT);
   configurePanel(taskbar, COLOR_TASKBAR);
 
-  createButton(taskbar, "START", 3, 3, 66, 30, startButtonEvent);
+  createButton(taskbar, tr("START", "ПУСК"), 3, 3, 66, 30, startButtonEvent);
   taskLabel_ = lv_label_create(taskbar);
-  lv_label_set_text(taskLabel_, "Desktop");
+  lv_label_set_text(taskLabel_, tr("Desktop", "Рабочий стол"));
   lv_obj_set_pos(taskLabel_, 76, 10);
   lv_obj_set_width(taskLabel_, 170);
   lv_label_set_long_mode(taskLabel_, LV_LABEL_LONG_DOT);
@@ -160,12 +294,14 @@ void DesktopShell::buildStartMenu() {
   lv_obj_set_style_border_color(startMenu_, lv_color_hex(0x607080), 0);
 
   lv_obj_t* title = lv_label_create(startMenu_);
-  lv_label_set_text(title, "OSEsp32 applications");
+  lv_label_set_text(title, tr("OSEsp32 applications", "Приложения OSEsp32"));
   lv_obj_set_pos(title, 8, 7);
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
 
-  const char* names[] = {"Files", "Settings", "System Info", "Text Input",
-                         "About"};
+  const char* names[] = {tr("Files", "Файлы"), tr("Settings", "Настройки"),
+                         tr("System Info", "Сведения о системе"),
+                         tr("Text Input", "Ввод текста"),
+                         tr("About", "О системе")};
   for (uint8_t index = 0; index < 5; ++index) {
     createButton(startMenu_, names[index], 7, 28 + index * 28, 160, 25,
                  appButtonEvent,
@@ -213,7 +349,7 @@ void DesktopShell::closeWindow() {
     lv_obj_delete(window_);
     window_ = nullptr;
   }
-  setTaskText("Desktop");
+  setTaskText(tr("Desktop", "Рабочий стол"));
 }
 
 void DesktopShell::closeDialog() {
@@ -233,13 +369,13 @@ void DesktopShell::showDiagnosticsDialog() {
   lv_obj_set_style_border_color(dialog_, lv_color_hex(COLOR_TITLE), 0);
 
   lv_obj_t* message = lv_label_create(dialog_);
-  lv_label_set_text(message,
-                    "Restart into hardware diagnostics?\n"
-                    "The next boot returns to the shell.");
+  lv_label_set_text(message, tr(
+      "Restart into hardware diagnostics?\nThe next boot returns to the shell.",
+      "Перейти к диагностике оборудования?\nСледующая загрузка вернёт оболочку."));
   lv_obj_set_pos(message, 12, 12);
   lv_obj_set_style_text_color(message, lv_color_hex(0x202020), 0);
-  createButton(dialog_, "CANCEL", 18, 75, 92, 32, cancelDialogEvent);
-  createButton(dialog_, "RESTART", 139, 75, 92, 32,
+  createButton(dialog_, tr("CANCEL", "ОТМЕНА"), 18, 75, 92, 32, cancelDialogEvent);
+  createButton(dialog_, tr("RESTART", "ПЕРЕЗАПУСК"), 139, 75, 92, 32,
                confirmDiagnosticsEvent);
   lv_obj_move_foreground(dialog_);
 }
@@ -257,7 +393,7 @@ void DesktopShell::showInfoDialog(const char* text) {
   lv_obj_set_pos(message, 12, 12);
   lv_obj_set_width(message, 226);
   lv_obj_set_style_text_color(message, lv_color_hex(0x202020), 0);
-  createButton(dialog_, "OK", 79, 68, 92, 30, cancelDialogEvent);
+  createButton(dialog_, tr("OK", "ОК"), 79, 68, 92, 30, cancelDialogEvent);
   lv_obj_move_foreground(dialog_);
 }
 
@@ -274,10 +410,12 @@ void DesktopShell::openApp(ShellAppId app) {
 }
 
 void DesktopShell::openFiles() {
-  lv_obj_t* content = createWindow("Files");
+  lv_obj_t* content = createWindow(tr("Files", "Файлы"));
   if (!storage_.mounted()) {
     lv_obj_t* label = lv_label_create(content);
-    lv_label_set_text(label, "SD card is not available.\nInsert a FAT32 card and reopen Files.");
+    lv_label_set_text(label, tr(
+        "SD card is not available.\nInsert a FAT32 card and reopen Files.",
+        "SD-карта недоступна.\nВставьте FAT32-карту и откройте Файлы."));
     lv_obj_set_pos(label, 14, 24);
     return;
   }
@@ -287,7 +425,8 @@ void DesktopShell::openFiles() {
                                   fileEntries_, entriesPerPage,
                                   fileEntryCount_, fileTotalCount_)) {
     lv_obj_t* label = lv_label_create(content);
-    lv_label_set_text(label, "Unable to read this directory.");
+    lv_label_set_text(label, tr("Unable to read this directory.",
+                                "Не удалось прочитать эту папку."));
     lv_obj_set_pos(label, 14, 24);
     return;
   }
@@ -319,7 +458,7 @@ void DesktopShell::openFiles() {
                  fileEntryEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
   }
 
-  createButton(content, "UP", 5, 132, 58, 27, filesUpEvent);
+  createButton(content, tr("UP", "ВВЕРХ"), 5, 132, 58, 27, filesUpEvent);
   createButton(content, "<", 70, 132, 42, 27, filesPreviousEvent);
   char pages[20];
   snprintf(pages, sizeof(pages), "%u / %u", filePage_ + 1, pageCount);
@@ -334,16 +473,24 @@ void DesktopShell::openImage(const char* path) {
   strlcpy(selectedImagePath_, path, sizeof(selectedImagePath_));
   if (!StorageService::makeLvglPath(selectedImagePath_, selectedImageLvPath_,
                                     sizeof(selectedImageLvPath_))) {
-    showInfoDialog("Image path is too long.");
+    showInfoDialog(tr("Image path is too long.",
+                      "Слишком длинный путь к изображению."));
     return;
   }
   lv_image_header_t header;
   if (lv_image_decoder_get_info(selectedImageLvPath_, &header) != LV_RESULT_OK) {
-    showInfoDialog("Unsupported image.\nUse lowercase .bmp, .jpg or .jpeg.");
+    const char* extension = strrchr(path, '.');
+    if (extension && (!strcasecmp(extension, ".jpg") ||
+                      !strcasecmp(extension, ".jpeg")))
+      showInfoDialog(tr("Unsupported JPEG encoding.\nTry baseline (not progressive) JPEG.",
+                        "Кодирование JPEG не поддерживается.\nИспользуйте baseline, не progressive."));
+    else
+      showInfoDialog(tr("Unsupported BMP encoding.\nUse uncompressed 16/24/32-bit BMP.",
+                        "Формат BMP не поддерживается.\nНужен несжатый BMP 16/24/32 бит."));
     return;
   }
 
-  lv_obj_t* content = createWindow("Image Viewer");
+  lv_obj_t* content = createWindow(tr("Image Viewer", "Просмотр изображения"));
   lv_obj_t* image = lv_image_create(content);
   lv_obj_set_pos(image, 3, 2);
   lv_obj_set_size(image, 300, 120);
@@ -351,58 +498,116 @@ void DesktopShell::openImage(const char* path) {
   lv_obj_set_style_bg_opa(image, LV_OPA_COVER, 0);
   lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CENTER);
   lv_image_set_src(image, selectedImageLvPath_);
-  createButton(content, "FILES", 5, 127, 70, 30, imageBackEvent);
-  createButton(content, "SET WALLPAPER", 105, 127, 194, 30,
+  createButton(content, tr("FILES", "ФАЙЛЫ"), 5, 127, 70, 30, imageBackEvent);
+  createButton(content, tr("SET WALLPAPER", "СДЕЛАТЬ ФОНОМ"), 105, 127, 194, 30,
                setWallpaperEvent);
 }
 
 void DesktopShell::openSettings() {
-  lv_obj_t* content = createWindow("Settings");
+  lv_obj_t* content = createWindow(tr("Settings", "Параметры"));
+  createSettingsRow(content, LV_SYMBOL_IMAGE, tr("Display", "Экран"),
+                    tr("Brightness, rotation and wallpaper",
+                       "Яркость, поворот и обои"),
+                    3, settingsDisplayEvent);
+  createSettingsRow(content, "A", tr("Language", "Язык"),
+                    language_ == SystemLanguage::Russian ? "Русский"
+                                                         : "English",
+                    54, settingsLanguageEvent);
+  createSettingsRow(content, LV_SYMBOL_EDIT, tr("Touch", "Сенсор"),
+                    tr("Calibration and touch coordinates",
+                       "Калибровка и координаты"),
+                    105, settingsTouchEvent);
+}
+
+void DesktopShell::openDisplaySettings() {
+  lv_obj_t* content = createWindow(tr("Display settings", "Параметры экрана"));
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsBackEvent);
   lv_obj_t* heading = lv_label_create(content);
-  lv_label_set_text(heading, "Backlight");
-  lv_obj_set_pos(heading, 12, 8);
+  lv_label_set_text(heading, tr("Brightness", "Яркость"));
+  lv_obj_set_pos(heading, 78, 10);
 
   lv_obj_t* slider = lv_slider_create(content);
-  lv_obj_set_pos(slider, 92, 10);
-  lv_obj_set_size(slider, 190, 16);
+  lv_obj_set_pos(slider, 10, 45);
+  lv_obj_set_size(slider, 286, 16);
   lv_slider_set_range(slider, 25, 255);
   lv_slider_set_value(slider, port_.displayDriver().getBrightness(),
                       LV_ANIM_OFF);
   lv_obj_add_event_cb(slider, brightnessEvent, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_event_cb(slider, brightnessSaveEvent, LV_EVENT_RELEASED, nullptr);
 
-  createButton(content, "CALIBRATE TOUCH", 12, 45, 138, 34,
-               calibrateEvent);
-  createButton(content, "RESET + CALIBRATE", 158, 45, 135, 34,
-               resetCalibrationEvent);
+  createButton(content,
+               rotation180_ ? tr("ROTATE TO 0", "ПОВЕРНУТЬ НА 0")
+                            : tr("ROTATE TO 180", "ПОВЕРНУТЬ НА 180"),
+               10, 75, 286, 32, rotationEvent);
+  createButton(content, tr("CLEAR WALLPAPER", "УБРАТЬ ОБОИ"),
+               10, 116, 286, 32, clearWallpaperEvent);
+}
 
-  createButton(content, rotation180_ ? "ROTATE TO 0" : "ROTATE TO 180",
-               12, 85, 138, 30, rotationEvent);
-  createButton(content, "CLEAR WALLPAPER", 158, 85, 135, 30,
-               clearWallpaperEvent);
+void DesktopShell::openLanguageSettings() {
+  lv_obj_t* content = createWindow(tr("Language", "Язык"));
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsBackEvent);
+  lv_obj_t* note = lv_label_create(content);
+  lv_label_set_text(note, tr("Choose interface language",
+                             "Выберите язык интерфейса"));
+  lv_obj_set_pos(note, 78, 10);
+  createSettingsRow(content, "EN", "English",
+                    language_ == SystemLanguage::English
+                        ? tr("Current language", "Текущий язык")
+                        : tr("Available", "Доступен"),
+                    39, languageEnglishEvent);
+  createSettingsRow(content, "RU", "Русский",
+                    language_ == SystemLanguage::Russian
+                        ? tr("Current language", "Текущий язык")
+                        : tr("Available", "Доступен"),
+                    92, languageRussianEvent);
+}
+
+void DesktopShell::openTouchSettings() {
+  lv_obj_t* content = createWindow(tr("Touch settings", "Параметры сенсора"));
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsBackEvent);
+  createButton(content, tr("CALIBRATE", "КАЛИБРОВАТЬ"), 10, 40, 138, 34,
+               calibrateEvent);
+  createButton(content, tr("RESET + CALIBRATE", "СБРОС + КАЛИБР."),
+               157, 40, 139, 34, resetCalibrationEvent);
 
   const TouchCalibration& calibration = port_.touchDriver().calibration();
-  char details[128];
-  snprintf(details, sizeof(details),
-           "Touch: %s\nX %u..%u%s   Y %u..%u%s",
-           calibration.stored ? "saved in NVS" : "board defaults",
-           calibration.rawXMin, calibration.rawXMax,
-           calibration.invertX ? " inv" : "", calibration.rawYMin,
-           calibration.rawYMax, calibration.invertY ? " inv" : "");
+  char details[160];
+  if (language_ == SystemLanguage::Russian) {
+    snprintf(details, sizeof(details),
+             "Калибровка: %s\nX %u..%u%s   Y %u..%u%s",
+             calibration.stored ? "сохранена" : "по умолчанию",
+             calibration.rawXMin, calibration.rawXMax,
+             calibration.invertX ? " обр" : "", calibration.rawYMin,
+             calibration.rawYMax, calibration.invertY ? " обр" : "");
+  } else {
+    snprintf(details, sizeof(details),
+             "Calibration: %s\nX %u..%u%s   Y %u..%u%s",
+             calibration.stored ? "saved" : "board defaults",
+             calibration.rawXMin, calibration.rawXMax,
+             calibration.invertX ? " inv" : "", calibration.rawYMin,
+             calibration.rawYMax, calibration.invertY ? " inv" : "");
+  }
   lv_obj_t* detailLabel = lv_label_create(content);
   lv_label_set_text(detailLabel, details);
-  lv_obj_set_pos(detailLabel, 12, 122);
+  lv_obj_set_pos(detailLabel, 10, 92);
 }
 
 void DesktopShell::openSystemInfo() {
-  lv_obj_t* content = createWindow("System Info");
+  lv_obj_t* content = createWindow(tr("System Info", "Сведения о системе"));
   const MemorySnapshot memory = kernel_->monitor().sample();
   char info[256];
-  snprintf(info, sizeof(info),
-           "ESP32  %u MHz   Flash %u MiB\n"
-           "Heap free %u KiB   minimum %u KiB\n"
-           "Largest block %u KiB\n"
-           "Events %lu   dropped %lu   faults %lu",
+  snprintf(info, sizeof(info), language_ == SystemLanguage::Russian
+           ? "ESP32  %u МГц   Flash %u МиБ\n"
+             "Свободно %u КиБ   минимум %u КиБ\n"
+             "Макс. блок %u КиБ\n"
+             "События %lu   пропущено %lu   сбои %lu"
+           : "ESP32  %u MHz   Flash %u MiB\n"
+             "Heap free %u KiB   minimum %u KiB\n"
+             "Largest block %u KiB\n"
+             "Events %lu   dropped %lu   faults %lu",
            ESP.getCpuFreqMHz(), ESP.getFlashChipSize() / 1048576,
            memory.freeHeap / 1024, memory.minimumFreeHeap / 1024,
            memory.largestFreeBlock / 1024,
@@ -412,17 +617,18 @@ void DesktopShell::openSystemInfo() {
   lv_obj_t* label = lv_label_create(content);
   lv_label_set_text(label, info);
   lv_obj_set_pos(label, 10, 8);
-  createButton(content, "HARDWARE DIAGNOSTICS", 42, 104, 220, 36,
+  createButton(content, tr("HARDWARE DIAGNOSTICS", "ДИАГНОСТИКА ОБОРУДОВАНИЯ"), 42, 104, 220, 36,
                diagnosticsEvent);
 }
 
 void DesktopShell::openTextInput() {
-  lv_obj_t* content = createWindow("Text Input");
+  lv_obj_t* content = createWindow(tr("Text Input", "Ввод текста"));
   lv_obj_t* textarea = lv_textarea_create(content);
   lv_obj_set_pos(textarea, 5, 2);
   lv_obj_set_size(textarea, 295, 31);
   lv_textarea_set_one_line(textarea, true);
-  lv_textarea_set_placeholder_text(textarea, "Touch here and type...");
+  lv_textarea_set_placeholder_text(
+      textarea, tr("Touch here and type...", "Нажмите и введите текст..."));
 
   lv_obj_t* keyboard = lv_keyboard_create(content);
   lv_obj_set_pos(keyboard, 3, 35);
@@ -430,23 +636,30 @@ void DesktopShell::openTextInput() {
   lv_obj_set_style_pad_all(keyboard, 2, 0);
   lv_obj_set_style_pad_row(keyboard, 2, 0);
   lv_obj_set_style_pad_column(keyboard, 2, 0);
-  lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_12, LV_PART_ITEMS);
+  lv_obj_set_style_text_font(keyboard, uiSmallFont(), LV_PART_ITEMS);
+  if (language_ == SystemLanguage::Russian) {
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER,
+                        RUSSIAN_KEYBOARD_LOWER, RUSSIAN_KEYBOARD_CONTROLS);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER,
+                        RUSSIAN_KEYBOARD_UPPER, RUSSIAN_KEYBOARD_CONTROLS);
+    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+  }
   lv_keyboard_set_textarea(keyboard, textarea);
   lv_obj_add_state(textarea, LV_STATE_FOCUSED);
 }
 
 void DesktopShell::openAbout() {
-  lv_obj_t* content = createWindow("About OSEsp32");
+  lv_obj_t* content = createWindow(tr("About OSEsp32", "О системе OSEsp32"));
   lv_obj_t* title = lv_label_create(content);
-  lv_label_set_text(title, "OSEsp32 0.3\nStorage and files preview");
+  lv_label_set_text(title, tr("OSEsp32 0.3\nStorage and files preview",
+                              "OSEsp32 0.3\nХранилище и файлы"));
   lv_obj_set_pos(title, 18, 14);
   lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
 
   lv_obj_t* text = lv_label_create(content);
-  lv_label_set_text(text,
-                    "Arduino-ESP32 + FreeRTOS + LVGL\n"
-                    "ESP32-2432S028 / ILI9341 / XPT2046\n\n"
-                    "External .yap applications: Stage 4");
+  lv_label_set_text(text, tr(
+      "Arduino-ESP32 + FreeRTOS + LVGL\nESP32-2432S028 / ILI9341 / XPT2046\n\nExternal .yap applications: Stage 4",
+      "Arduino-ESP32 + FreeRTOS + LVGL\nESP32-2432S028 / ILI9341 / XPT2046\n\nВнешние приложения .yap: этап 4"));
   lv_obj_set_pos(text, 18, 58);
 }
 
@@ -470,11 +683,21 @@ void DesktopShell::applyWallpaper() {
   removeWallpaper();
   if (!storage_.mounted() ||
       !settings_.loadWallpaper(wallpaperPath_, sizeof(wallpaperPath_)) ||
-      !storage_.exists(wallpaperPath_) ||
-      !StorageService::makeLvglPath(wallpaperPath_, wallpaperLvPath_,
-                                    sizeof(wallpaperLvPath_))) {
+      !storage_.exists(wallpaperPath_)) {
     return;
   }
+
+  if (strcmp(wallpaperPath_, WallpaperService::OPTIMIZED_SD_PATH)) {
+    if (!StorageService::makeLvglPath(wallpaperPath_, wallpaperLvPath_,
+                                      sizeof(wallpaperLvPath_)) ||
+        !wallpaperService_.optimize(wallpaperLvPath_, 0x0B4F) ||
+        !settings_.saveWallpaper(WallpaperService::OPTIMIZED_SD_PATH))
+      return;
+    strlcpy(wallpaperPath_, WallpaperService::OPTIMIZED_SD_PATH,
+            sizeof(wallpaperPath_));
+  }
+  strlcpy(wallpaperLvPath_, WallpaperService::OPTIMIZED_LVGL_PATH,
+          sizeof(wallpaperLvPath_));
 
   lv_image_header_t header;
   if (lv_image_decoder_get_info(wallpaperLvPath_, &header) != LV_RESULT_OK)
@@ -525,7 +748,8 @@ void DesktopShell::startCalibration(bool ignoreCurrentPress) {
   lv_obj_set_style_text_color(calibrationTitle_, lv_color_white(), 0);
 
   lv_obj_t* instruction = lv_label_create(calibrationOverlay_);
-  lv_label_set_text(instruction, "Hold center, then release stylus");
+  lv_label_set_text(instruction, tr("Hold center, then release stylus",
+                                    "Удерживайте центр, затем отпустите"));
   lv_obj_set_pos(instruction, 45, 112);
   lv_obj_set_style_text_color(instruction, lv_color_hex(0xB8C7D1), 0);
 
@@ -534,7 +758,7 @@ void DesktopShell::startCalibration(bool ignoreCurrentPress) {
   lv_obj_set_size(calibrationProgress_, 120, 7);
   lv_bar_set_range(calibrationProgress_, 0, 100);
 
-  lv_obj_t* cancel = createButton(calibrationOverlay_, "CANCEL", 122, 3, 76,
+  lv_obj_t* cancel = createButton(calibrationOverlay_, tr("CANCEL", "ОТМЕНА"), 122, 3, 76,
                                   27, cancelDialogEvent);
   lv_obj_remove_flag(cancel, LV_OBJ_FLAG_CLICKABLE);
 
@@ -554,7 +778,8 @@ void DesktopShell::startCalibration(bool ignoreCurrentPress) {
 void DesktopShell::drawCalibrationTarget() {
   if (!calibrationOverlay_) return;
   char title[32];
-  snprintf(title, sizeof(title), "TOUCH CALIBRATION %u / %u",
+  snprintf(title, sizeof(title), language_ == SystemLanguage::Russian
+           ? "КАЛИБРОВКА %u / %u" : "TOUCH CALIBRATION %u / %u",
            calibration_.pointIndex() + 1,
            TouchCalibrationService::POINT_COUNT);
   lv_label_set_text(calibrationTitle_, title);
@@ -604,7 +829,8 @@ void DesktopShell::finishCalibration(bool success) {
   calibrationTarget_ = nullptr;
   calibrationProgress_ = nullptr;
   port_.suspendPointer(false);
-  setTaskText(success ? "Touch calibration saved" : "Calibration failed");
+  setTaskText(success ? tr("Touch calibration saved", "Калибровка сохранена")
+                      : tr("Calibration failed", "Ошибка калибровки"));
   kernel_->logger().info("shell", "touch calibration UI finished: %s",
                          success ? "saved" : "failed");
 }
@@ -617,7 +843,7 @@ void DesktopShell::cancelCalibration() {
   calibrationTarget_ = nullptr;
   calibrationProgress_ = nullptr;
   port_.suspendPointer(false);
-  setTaskText("Touch calibration cancelled");
+  setTaskText(tr("Touch calibration cancelled", "Калибровка отменена"));
 }
 
 void DesktopShell::startButtonEvent(lv_event_t*) {
@@ -657,7 +883,45 @@ void DesktopShell::rotationEvent(lv_event_t*) {
                                       "rotation could not be saved");
     return;
   }
-  active_->setTaskText("Applying rotation...");
+  active_->setTaskText(active_->tr("Applying rotation...", "Применение поворота..."));
+  delay(150);
+  ESP.restart();
+}
+
+void DesktopShell::settingsDisplayEvent(lv_event_t*) {
+  active_->openDisplaySettings();
+}
+
+void DesktopShell::settingsLanguageEvent(lv_event_t*) {
+  active_->openLanguageSettings();
+}
+
+void DesktopShell::settingsTouchEvent(lv_event_t*) {
+  active_->openTouchSettings();
+}
+
+void DesktopShell::settingsBackEvent(lv_event_t*) { active_->openSettings(); }
+
+void DesktopShell::languageEnglishEvent(lv_event_t*) {
+  if (active_->language_ == SystemLanguage::English) return;
+  if (!active_->settings_.saveLanguage(SystemLanguage::English)) {
+    active_->showInfoDialog(active_->tr("Could not save language.",
+                                        "Не удалось сохранить язык."));
+    return;
+  }
+  active_->setTaskText(active_->tr("Restarting...", "Перезапуск..."));
+  delay(150);
+  ESP.restart();
+}
+
+void DesktopShell::languageRussianEvent(lv_event_t*) {
+  if (active_->language_ == SystemLanguage::Russian) return;
+  if (!active_->settings_.saveLanguage(SystemLanguage::Russian)) {
+    active_->showInfoDialog(active_->tr("Could not save language.",
+                                        "Не удалось сохранить язык."));
+    return;
+  }
+  active_->setTaskText(active_->tr("Restarting...", "Перезапуск..."));
   delay(150);
   ESP.restart();
 }
@@ -677,13 +941,14 @@ void DesktopShell::diagnosticsEvent(lv_event_t*) {
 
 void DesktopShell::confirmDiagnosticsEvent(lv_event_t*) {
   if (!active_->bootMode_->requestDiagnostics()) {
-    active_->setTaskText("Could not request diagnostics");
+    active_->setTaskText(active_->tr("Could not request diagnostics",
+                                     "Не удалось запустить диагностику"));
     active_->kernel_->faults().report(FaultCode::StorageUnavailable, "boot",
                                       "diagnostic request could not be saved");
     return;
   }
   active_->kernel_->logger().info("shell", "restarting into diagnostics");
-  active_->setTaskText("Restarting...");
+  active_->setTaskText(active_->tr("Restarting...", "Перезапуск..."));
   delay(150);
   ESP.restart();
 }
@@ -702,7 +967,9 @@ void DesktopShell::fileEntryEvent(lv_event_t* event) {
   } else if (StorageService::isImagePath(entry.path)) {
     active_->openImage(entry.path);
   } else {
-    active_->showInfoDialog("No application is associated\nwith this file type yet.");
+    active_->showInfoDialog(active_->tr(
+        "No application is associated\nwith this file type yet.",
+        "Для этого типа файлов\nпока нет приложения."));
   }
 }
 
@@ -729,18 +996,26 @@ void DesktopShell::filesNextEvent(lv_event_t*) {
 void DesktopShell::imageBackEvent(lv_event_t*) { active_->openFiles(); }
 
 void DesktopShell::setWallpaperEvent(lv_event_t*) {
-  if (!active_->settings_.saveWallpaper(active_->selectedImagePath_)) {
+  active_->setTaskText(active_->tr("Preparing wallpaper...", "Подготовка обоев..."));
+  lv_refr_now(nullptr);
+  if (!active_->wallpaperService_.optimize(active_->selectedImageLvPath_,
+                                           0x0B4F) ||
+      !active_->settings_.saveWallpaper(
+          WallpaperService::OPTIMIZED_SD_PATH)) {
     active_->kernel_->faults().report(FaultCode::StorageUnavailable,
                                       "settings",
-                                      "wallpaper path could not be saved");
+                                      "wallpaper could not be optimized");
+    active_->showInfoDialog(active_->tr("Could not prepare this wallpaper.",
+                                        "Не удалось подготовить обои."));
     return;
   }
   active_->applyWallpaper();
-  active_->setTaskText("Wallpaper saved");
+  active_->setTaskText(active_->tr("Wallpaper saved", "Обои установлены"));
 }
 
 void DesktopShell::clearWallpaperEvent(lv_event_t*) {
   active_->settings_.clearWallpaper();
   active_->removeWallpaper();
-  active_->setTaskText("Wallpaper cleared");
+  active_->wallpaperService_.clearOptimizedFile();
+  active_->setTaskText(active_->tr("Wallpaper cleared", "Обои удалены"));
 }
