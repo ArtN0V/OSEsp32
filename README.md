@@ -4,16 +4,20 @@ OSEsp32 is a lightweight Windows-inspired application environment for the
 ESP32-2432S028 Cheap Yellow Display. The project is built as a normal Arduino
 IDE sketch while keeping the implementation in modular C++ files.
 
-Stages 0 and 1 established the hardware and platform foundation. Development
-is now on **Roadmap Stage 2: graphical shell**. The normal boot opens the LVGL
-desktop; the proven diagnostic UI remains available as a recovery mode.
+Stages 0–2 established the hardware, platform foundation and graphical shell.
+Development is now on **Roadmap Stage 3: storage, files and personalization**.
+The normal boot opens the LVGL desktop; the proven diagnostic UI remains
+available as a recovery mode.
 
 ## Current capabilities
 
 - Windows-inspired desktop, taskbar, Start menu, uptime clock and foreground
   windows.
-- Built-in Files placeholder, Settings, System Info, Text Input and About apps.
-- On-screen keyboard and partial LVGL rendering without a full framebuffer.
+- Paged SD file manager, built-in BMP/JPEG viewer and desktop wallpapers.
+- Settings for brightness, touch calibration, wallpaper reset and persistent
+  0/180-degree screen rotation.
+- Compact on-screen keyboard and partial LVGL rendering without a full
+  framebuffer.
 - First-boot and Settings-driven five-point touch calibration stored in NVS.
 - Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
   light sensor and memory/stress testing.
@@ -38,8 +42,8 @@ desktop; the proven diagnostic UI remains available as a recovery mode.
 9. Open Serial Monitor at **115200 baud**, line ending optional.
 
 The project-local `partitions.csv` defines two OTA application slots and a
-small internal SPIFFS area. User applications and documents will eventually
-live on the SD card.
+small internal SPIFFS area. On first SD mount, OSEsp32 creates `/OSEsp32/Apps`,
+`/OSEsp32/Data` and `/OSEsp32/Wallpapers` for future applications and content.
 
 `platformio.ini` and the guarded `src/main.cpp` exist only for repeatable
 command-line/CI build checks. They do not change the Arduino IDE workflow and
@@ -86,6 +90,19 @@ stylus completely between points. The fitted ranges and both axis directions
 are saved in NVS and restored automatically after reboot. Send `r` in Serial
 Monitor to discard the saved values and return to board defaults.
 
+### Images, wallpaper and rotation
+
+Open **Files** and select a `.bmp`, `.jpg` or `.jpeg` file to view it. Use
+lowercase filename extensions for compatibility with the lightweight LVGL
+decoders. The **SET WALLPAPER** button stores only the SD path in NVS, so the
+card and file must remain available. Wallpapers are centered without scaling;
+use **320x204** pixels for an exact fit above the taskbar. Settings can clear
+the wallpaper.
+
+Settings also offers **ROTATE TO 180** / **ROTATE TO 0**. The choice is saved
+and the board restarts so the display and touch transform change together.
+Touch calibration remains valid across the two orientations.
+
 ## Dependencies
 
 Required now:
@@ -123,6 +140,7 @@ docs/ARCHITECTURE.md      long-term OSEsp32 boundaries
 docs/ROADMAP.md           development stages
 docs/STAGE_1.md           platform-foundation plan and acceptance checks
 docs/STAGE_2.md           graphical-shell plan and acceptance checks
+docs/STAGE_3.md           storage and personalization plan and checks
 ```
 
 ## Safety

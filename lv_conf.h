@@ -53,6 +53,12 @@
 #define LV_USE_TILEVIEW 0
 #define LV_USE_WIN 0
 
+/* Stream image files from SD without full-frame allocations. */
+#define LV_USE_BMP 1
+#define LV_USE_TJPGD 1
+#define LV_USE_LODEPNG 0
+#define LV_USE_LIBPNG 0
+
 #define LV_BUILD_EXAMPLES 0
 #define LV_BUILD_DEMOS 0
 

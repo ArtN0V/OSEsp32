@@ -12,10 +12,11 @@ constexpr int16_t TARGET_Y[TouchCalibrationService::POINT_COUNT] = {
 }
 
 void TouchCalibrationService::begin(TouchDriver& touch, EventBus& events,
-                                    Logger& logger) {
+                                    Logger& logger, bool rotation180) {
   touch_ = &touch;
   events_ = &events;
   logger_ = &logger;
+  rotation180_ = rotation180;
 }
 
 void TouchCalibrationService::start(bool ignoreUntilRelease) {
@@ -103,6 +104,7 @@ CalibrationUpdate TouchCalibrationService::update(bool pressed,
 }
 
 bool TouchCalibrationService::fitAxis(const TouchPoint* points, bool useX,
+                                      bool rotation180,
                                       uint16_t& rawMin, uint16_t& rawMax,
                                       bool& inverted) {
   double sumScreen = 0;
@@ -113,7 +115,8 @@ bool TouchCalibrationService::fitAxis(const TouchPoint* points, bool useX,
                                     : board::SCREEN_HEIGHT - 1;
 
   for (uint8_t index = 0; index < POINT_COUNT; ++index) {
-    const double screen = useX ? TARGET_X[index] : TARGET_Y[index];
+    double screen = useX ? TARGET_X[index] : TARGET_Y[index];
+    if (rotation180) screen = screenMaximum - screen;
     const double raw = useX ? points[index].rawX : points[index].rawY;
     sumScreen += screen;
     sumRaw += raw;
@@ -143,8 +146,8 @@ bool TouchCalibrationService::finish() {
   uint16_t yMax = 0;
   bool invertX = false;
   bool invertY = false;
-  const bool valid = fitAxis(points_, true, xMin, xMax, invertX) &&
-                     fitAxis(points_, false, yMin, yMax, invertY);
+  const bool valid = fitAxis(points_, true, rotation180_, xMin, xMax, invertX) &&
+                     fitAxis(points_, false, rotation180_, yMin, yMax, invertY);
   if (!valid ||
       !touch_->saveCalibration(xMin, xMax, yMin, yMax, invertX, invertY)) {
     logger_->error("touch-cal", "calibration fit rejected");

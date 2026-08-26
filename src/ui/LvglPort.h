@@ -11,7 +11,7 @@ class LvglPort {
  public:
   static constexpr uint16_t DRAW_LINES = 20;
 
-  bool begin();
+  bool begin(bool rotation180 = false);
   void update();
   void suspendPointer(bool suspended) { pointerSuspended_ = suspended; }
 
@@ -30,6 +30,7 @@ class LvglPort {
   TouchPoint touchPoint_;
   bool touchPressed_ = false;
   bool pointerSuspended_ = false;
+  bool rotation180_ = false;
 
   static uint32_t tickCallback();
   static void flushCallback(lv_display_t* display, const lv_area_t* area,

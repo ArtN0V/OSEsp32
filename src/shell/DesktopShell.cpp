@@ -36,13 +36,18 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   active_ = this;
   kernel_ = &kernel;
   bootMode_ = &bootMode;
-  if (!port_.begin()) {
+  rotation180_ = settings_.loadRotation180();
+  if (!port_.begin(rotation180_)) {
     kernel_->faults().report(FaultCode::InternalError, "shell",
                              "LVGL port initialization failed");
     return false;
   }
 
-  calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger());
+  storage_.begin(kernel_->events(), kernel_->logger());
+  storage_.registerLvglDriver();
+  previousStorageMounted_ = storage_.mounted();
+  calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger(),
+                     rotation180_);
   port_.displayDriver().setBrightness(settings_.loadBrightness());
   buildDesktop();
   kernel_->setLifecycle(LifecycleState::Running);
@@ -57,6 +62,17 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
 
 void DesktopShell::update() {
   port_.update();
+  storage_.update();
+  if (storage_.mounted() != previousStorageMounted_) {
+    previousStorageMounted_ = storage_.mounted();
+    if (previousStorageMounted_)
+      applyWallpaper();
+    else {
+      closeWindow();
+      removeWallpaper();
+      setTaskText("SD card removed");
+    }
+  }
   if (calibration_.active()) updateCalibration();
   updateClock();
   delay(2);
@@ -88,6 +104,7 @@ void DesktopShell::buildDesktop() {
   configurePanel(screen_, COLOR_DESKTOP_TOP);
   lv_obj_set_style_bg_grad_color(screen_, lv_color_hex(COLOR_DESKTOP_BOTTOM), 0);
   lv_obj_set_style_bg_grad_dir(screen_, LV_GRAD_DIR_VER, 0);
+  applyWallpaper();
 
   lv_obj_t* brand = lv_label_create(screen_);
   lv_label_set_text(brand, "OSEsp32");
@@ -227,6 +244,23 @@ void DesktopShell::showDiagnosticsDialog() {
   lv_obj_move_foreground(dialog_);
 }
 
+void DesktopShell::showInfoDialog(const char* text) {
+  closeDialog();
+  dialog_ = lv_obj_create(screen_);
+  lv_obj_set_pos(dialog_, 35, 62);
+  lv_obj_set_size(dialog_, 250, 108);
+  configurePanel(dialog_, 0xF7F7F7, 4);
+  lv_obj_set_style_border_width(dialog_, 2, 0);
+  lv_obj_set_style_border_color(dialog_, lv_color_hex(COLOR_TITLE), 0);
+  lv_obj_t* message = lv_label_create(dialog_);
+  lv_label_set_text(message, text);
+  lv_obj_set_pos(message, 12, 12);
+  lv_obj_set_width(message, 226);
+  lv_obj_set_style_text_color(message, lv_color_hex(0x202020), 0);
+  createButton(dialog_, "OK", 79, 68, 92, 30, cancelDialogEvent);
+  lv_obj_move_foreground(dialog_);
+}
+
 void DesktopShell::openApp(ShellAppId app) {
   kernel_->events().publish(SystemEventType::ShellApplicationOpened,
                             static_cast<uint32_t>(app));
@@ -241,12 +275,85 @@ void DesktopShell::openApp(ShellAppId app) {
 
 void DesktopShell::openFiles() {
   lv_obj_t* content = createWindow("Files");
-  lv_obj_t* label = lv_label_create(content);
-  lv_label_set_text(label,
-                    "File Manager arrives in Stage 3.\n\n"
-                    "SD access is already available in\n"
-                    "hardware diagnostics.");
-  lv_obj_set_pos(label, 14, 18);
+  if (!storage_.mounted()) {
+    lv_obj_t* label = lv_label_create(content);
+    lv_label_set_text(label, "SD card is not available.\nInsert a FAT32 card and reopen Files.");
+    lv_obj_set_pos(label, 14, 24);
+    return;
+  }
+
+  constexpr uint8_t entriesPerPage = StorageService::PAGE_ENTRIES;
+  if (!storage_.listDirectoryPage(currentPath_, filePage_ * entriesPerPage,
+                                  fileEntries_, entriesPerPage,
+                                  fileEntryCount_, fileTotalCount_)) {
+    lv_obj_t* label = lv_label_create(content);
+    lv_label_set_text(label, "Unable to read this directory.");
+    lv_obj_set_pos(label, 14, 24);
+    return;
+  }
+
+  const uint8_t pageCount =
+      fileTotalCount_ == 0 ? 1 : (fileTotalCount_ + entriesPerPage - 1) / entriesPerPage;
+  if (filePage_ >= pageCount) {
+    filePage_ = pageCount - 1;
+    if (!storage_.listDirectoryPage(currentPath_, filePage_ * entriesPerPage,
+                                    fileEntries_, entriesPerPage,
+                                    fileEntryCount_, fileTotalCount_)) {
+      return;
+    }
+  }
+
+  lv_obj_t* path = lv_label_create(content);
+  lv_label_set_text(path, currentPath_);
+  lv_obj_set_pos(path, 7, 4);
+  lv_obj_set_width(path, 290);
+  lv_label_set_long_mode(path, LV_LABEL_LONG_DOT);
+
+  for (uint8_t row = 0; row < entriesPerPage; ++row) {
+    const uint8_t index = row;
+    if (index >= fileEntryCount_) break;
+    char caption[64];
+    snprintf(caption, sizeof(caption), "%s%s",
+             fileEntries_[index].directory ? "[DIR] " : "", fileEntries_[index].name);
+    createButton(content, caption, 5, 24 + row * 26, 296, 23,
+                 fileEntryEvent, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
+  }
+
+  createButton(content, "UP", 5, 132, 58, 27, filesUpEvent);
+  createButton(content, "<", 70, 132, 42, 27, filesPreviousEvent);
+  char pages[20];
+  snprintf(pages, sizeof(pages), "%u / %u", filePage_ + 1, pageCount);
+  lv_obj_t* page = lv_label_create(content);
+  lv_label_set_text(page, pages);
+  lv_obj_set_pos(page, 130, 140);
+  createButton(content, ">", 257, 132, 42, 27, filesNextEvent);
+}
+
+void DesktopShell::openImage(const char* path) {
+  if (!path || !storage_.mounted()) return;
+  strlcpy(selectedImagePath_, path, sizeof(selectedImagePath_));
+  if (!StorageService::makeLvglPath(selectedImagePath_, selectedImageLvPath_,
+                                    sizeof(selectedImageLvPath_))) {
+    showInfoDialog("Image path is too long.");
+    return;
+  }
+  lv_image_header_t header;
+  if (lv_image_decoder_get_info(selectedImageLvPath_, &header) != LV_RESULT_OK) {
+    showInfoDialog("Unsupported image.\nUse lowercase .bmp, .jpg or .jpeg.");
+    return;
+  }
+
+  lv_obj_t* content = createWindow("Image Viewer");
+  lv_obj_t* image = lv_image_create(content);
+  lv_obj_set_pos(image, 3, 2);
+  lv_obj_set_size(image, 300, 120);
+  lv_obj_set_style_bg_color(image, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(image, LV_OPA_COVER, 0);
+  lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CENTER);
+  lv_image_set_src(image, selectedImageLvPath_);
+  createButton(content, "FILES", 5, 127, 70, 30, imageBackEvent);
+  createButton(content, "SET WALLPAPER", 105, 127, 194, 30,
+               setWallpaperEvent);
 }
 
 void DesktopShell::openSettings() {
@@ -269,6 +376,11 @@ void DesktopShell::openSettings() {
   createButton(content, "RESET + CALIBRATE", 158, 45, 135, 34,
                resetCalibrationEvent);
 
+  createButton(content, rotation180_ ? "ROTATE TO 0" : "ROTATE TO 180",
+               12, 85, 138, 30, rotationEvent);
+  createButton(content, "CLEAR WALLPAPER", 158, 85, 135, 30,
+               clearWallpaperEvent);
+
   const TouchCalibration& calibration = port_.touchDriver().calibration();
   char details[128];
   snprintf(details, sizeof(details),
@@ -279,7 +391,7 @@ void DesktopShell::openSettings() {
            calibration.rawYMax, calibration.invertY ? " inv" : "");
   lv_obj_t* detailLabel = lv_label_create(content);
   lv_label_set_text(detailLabel, details);
-  lv_obj_set_pos(detailLabel, 12, 94);
+  lv_obj_set_pos(detailLabel, 12, 122);
 }
 
 void DesktopShell::openSystemInfo() {
@@ -307,14 +419,18 @@ void DesktopShell::openSystemInfo() {
 void DesktopShell::openTextInput() {
   lv_obj_t* content = createWindow("Text Input");
   lv_obj_t* textarea = lv_textarea_create(content);
-  lv_obj_set_pos(textarea, 5, 4);
-  lv_obj_set_size(textarea, 295, 44);
+  lv_obj_set_pos(textarea, 5, 2);
+  lv_obj_set_size(textarea, 295, 31);
   lv_textarea_set_one_line(textarea, true);
   lv_textarea_set_placeholder_text(textarea, "Touch here and type...");
 
   lv_obj_t* keyboard = lv_keyboard_create(content);
-  lv_obj_set_pos(keyboard, 3, 51);
-  lv_obj_set_size(keyboard, 299, 106);
+  lv_obj_set_pos(keyboard, 3, 35);
+  lv_obj_set_size(keyboard, 299, 123);
+  lv_obj_set_style_pad_all(keyboard, 2, 0);
+  lv_obj_set_style_pad_row(keyboard, 2, 0);
+  lv_obj_set_style_pad_column(keyboard, 2, 0);
+  lv_obj_set_style_text_font(keyboard, &lv_font_montserrat_12, LV_PART_ITEMS);
   lv_keyboard_set_textarea(keyboard, textarea);
   lv_obj_add_state(textarea, LV_STATE_FOCUSED);
 }
@@ -322,7 +438,7 @@ void DesktopShell::openTextInput() {
 void DesktopShell::openAbout() {
   lv_obj_t* content = createWindow("About OSEsp32");
   lv_obj_t* title = lv_label_create(content);
-  lv_label_set_text(title, "OSEsp32 0.2\nGraphical shell preview");
+  lv_label_set_text(title, "OSEsp32 0.3\nStorage and files preview");
   lv_obj_set_pos(title, 18, 14);
   lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
 
@@ -348,6 +464,45 @@ void DesktopShell::updateClock() {
 
 void DesktopShell::setTaskText(const char* text) {
   if (taskLabel_) lv_label_set_text(taskLabel_, text);
+}
+
+void DesktopShell::applyWallpaper() {
+  removeWallpaper();
+  if (!storage_.mounted() ||
+      !settings_.loadWallpaper(wallpaperPath_, sizeof(wallpaperPath_)) ||
+      !storage_.exists(wallpaperPath_) ||
+      !StorageService::makeLvglPath(wallpaperPath_, wallpaperLvPath_,
+                                    sizeof(wallpaperLvPath_))) {
+    return;
+  }
+
+  lv_image_header_t header;
+  if (lv_image_decoder_get_info(wallpaperLvPath_, &header) != LV_RESULT_OK)
+    return;
+  wallpaper_ = lv_image_create(screen_);
+  lv_obj_set_pos(wallpaper_, 0, 0);
+  lv_obj_set_size(wallpaper_, board::SCREEN_WIDTH, TASKBAR_Y);
+  lv_image_set_inner_align(wallpaper_, LV_IMAGE_ALIGN_CENTER);
+  lv_image_set_src(wallpaper_, wallpaperLvPath_);
+  lv_obj_remove_flag(wallpaper_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_move_to_index(wallpaper_, 0);
+}
+
+void DesktopShell::removeWallpaper() {
+  if (wallpaper_) {
+    lv_obj_delete(wallpaper_);
+    wallpaper_ = nullptr;
+  }
+}
+
+void DesktopShell::parentDirectory() {
+  if (!strcmp(currentPath_, "/")) return;
+  char* slash = strrchr(currentPath_, '/');
+  if (!slash || slash == currentPath_)
+    strlcpy(currentPath_, "/", sizeof(currentPath_));
+  else
+    *slash = '\0';
+  filePage_ = 0;
 }
 
 void DesktopShell::startCalibration(bool ignoreCurrentPress) {
@@ -495,6 +650,18 @@ void DesktopShell::brightnessSaveEvent(lv_event_t* event) {
   }
 }
 
+void DesktopShell::rotationEvent(lv_event_t*) {
+  if (!active_->settings_.saveRotation180(!active_->rotation180_)) {
+    active_->kernel_->faults().report(FaultCode::StorageUnavailable,
+                                      "settings",
+                                      "rotation could not be saved");
+    return;
+  }
+  active_->setTaskText("Applying rotation...");
+  delay(150);
+  ESP.restart();
+}
+
 void DesktopShell::calibrateEvent(lv_event_t*) {
   active_->startCalibration(true);
 }
@@ -522,3 +689,58 @@ void DesktopShell::confirmDiagnosticsEvent(lv_event_t*) {
 }
 
 void DesktopShell::cancelDialogEvent(lv_event_t*) { active_->closeDialog(); }
+
+void DesktopShell::fileEntryEvent(lv_event_t* event) {
+  const uint8_t index = static_cast<uint8_t>(
+      reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  if (index >= active_->fileEntryCount_) return;
+  const StorageEntry& entry = active_->fileEntries_[index];
+  if (entry.directory) {
+    strlcpy(active_->currentPath_, entry.path, sizeof(active_->currentPath_));
+    active_->filePage_ = 0;
+    active_->openFiles();
+  } else if (StorageService::isImagePath(entry.path)) {
+    active_->openImage(entry.path);
+  } else {
+    active_->showInfoDialog("No application is associated\nwith this file type yet.");
+  }
+}
+
+void DesktopShell::filesUpEvent(lv_event_t*) {
+  active_->parentDirectory();
+  active_->openFiles();
+}
+
+void DesktopShell::filesPreviousEvent(lv_event_t*) {
+  if (active_->filePage_ > 0) --active_->filePage_;
+  active_->openFiles();
+}
+
+void DesktopShell::filesNextEvent(lv_event_t*) {
+  constexpr uint8_t entriesPerPage = StorageService::PAGE_ENTRIES;
+  const uint8_t pageCount = active_->fileTotalCount_ == 0
+                                ? 1
+                                : (active_->fileTotalCount_ + entriesPerPage - 1) /
+                                      entriesPerPage;
+  if (active_->filePage_ + 1 < pageCount) ++active_->filePage_;
+  active_->openFiles();
+}
+
+void DesktopShell::imageBackEvent(lv_event_t*) { active_->openFiles(); }
+
+void DesktopShell::setWallpaperEvent(lv_event_t*) {
+  if (!active_->settings_.saveWallpaper(active_->selectedImagePath_)) {
+    active_->kernel_->faults().report(FaultCode::StorageUnavailable,
+                                      "settings",
+                                      "wallpaper path could not be saved");
+    return;
+  }
+  active_->applyWallpaper();
+  active_->setTaskText("Wallpaper saved");
+}
+
+void DesktopShell::clearWallpaperEvent(lv_event_t*) {
+  active_->settings_.clearWallpaper();
+  active_->removeWallpaper();
+  active_->setTaskText("Wallpaper cleared");
+}

@@ -21,7 +21,8 @@ class TouchCalibrationService {
   static constexpr uint16_t REQUIRED_SAMPLES = 8;
   static constexpr uint16_t MAX_SAMPLES = 64;
 
-  void begin(TouchDriver& touch, EventBus& events, Logger& logger);
+  void begin(TouchDriver& touch, EventBus& events, Logger& logger,
+             bool rotation180 = false);
   void start(bool ignoreUntilRelease = false);
   void cancel();
   CalibrationUpdate update(bool pressed, const TouchPoint& point);
@@ -37,6 +38,7 @@ class TouchCalibrationService {
   TouchDriver* touch_ = nullptr;
   EventBus* events_ = nullptr;
   Logger* logger_ = nullptr;
+  bool rotation180_ = false;
   bool active_ = false;
   bool ignoreUntilRelease_ = false;
   bool wasPressed_ = false;
@@ -48,6 +50,6 @@ class TouchCalibrationService {
 
   void resetSample();
   bool finish();
-  static bool fitAxis(const TouchPoint* points, bool useX, uint16_t& rawMin,
-                      uint16_t& rawMax, bool& inverted);
+  static bool fitAxis(const TouchPoint* points, bool useX, bool rotation180,
+                      uint16_t& rawMin, uint16_t& rawMax, bool& inverted);
 };

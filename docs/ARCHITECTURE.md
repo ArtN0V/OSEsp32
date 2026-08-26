@@ -50,7 +50,19 @@ classic ESP32 cannot isolate a faulty native application from the OS.
 - System task: settings, monitoring and lifecycle.
 - Network task: created only while network functionality is requested.
 
-Stage 2 runs the kernel and LVGL cooperatively from the Arduino loop so all UI
-mutation is single-threaded. Recovery diagnostics remain intentionally
-synchronous. Dedicated storage and application tasks are introduced only when
-their services arrive in Stages 3 and 4.
+Stages 2 and 3 run the kernel, LVGL and serialized storage service
+cooperatively from the Arduino loop. This keeps both LVGL object mutation and
+SD access single-owner on the no-PSRAM target. Recovery diagnostics remain
+intentionally synchronous. A separate application task is considered in
+Stage 4; it must request storage work through the service instead of touching
+`SD` directly.
+
+## Stage 3 image policy
+
+- The LVGL `S:` filesystem driver is the only UI-facing path to SD assets.
+- BMP and JPEG are decoded incrementally; images are not copied into a full
+  screen framebuffer.
+- The first wallpaper implementation uses native pixels, centered and clipped
+  to the 320x204 desktop area. A 320x204 image gives a predictable result.
+- PNG and arbitrary resampling are deferred until their heap cost is measured.
+- Wallpaper paths and rotation live in NVS; image bytes remain on SD.

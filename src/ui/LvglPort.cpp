@@ -1,7 +1,9 @@
 #include "LvglPort.h"
 
-bool LvglPort::begin() {
+bool LvglPort::begin(bool rotation180) {
+  rotation180_ = rotation180;
   if (!displayDriver_.begin()) return false;
+  if (rotation180_) displayDriver_.setRotation(3);
   displayDriver_.initDMA();
   touchDriver_.begin();
 
@@ -32,6 +34,10 @@ bool LvglPort::begin() {
 
 void LvglPort::update() {
   touchPressed_ = touchDriver_.read(touchPoint_);
+  if (touchPressed_ && rotation180_) {
+    touchPoint_.x = board::SCREEN_WIDTH - 1 - touchPoint_.x;
+    touchPoint_.y = board::SCREEN_HEIGHT - 1 - touchPoint_.y;
+  }
   lv_timer_handler();
 }
 
