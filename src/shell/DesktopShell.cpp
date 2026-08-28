@@ -476,13 +476,18 @@ lv_obj_t* DesktopShell::createWindow(const char* title) {
 
 void DesktopShell::closeWindow() {
   closeDialog();
+  // The Notes keyboard is a screen-level system panel, not a child of the
+  // application window. Delete it explicitly before deleting the window.
+  if (noteKeyboard_) {
+    lv_obj_delete(noteKeyboard_);
+    noteKeyboard_ = nullptr;
+  }
   if (window_) {
     lv_obj_delete(window_);
     window_ = nullptr;
   }
   noteTitleArea_ = nullptr;
   noteBodyArea_ = nullptr;
-  noteKeyboard_ = nullptr;
   noteHideKeyboardButton_ = nullptr;
   dateTimeContent_ = nullptr;
   noteEditorOpen_ = false;
@@ -1071,13 +1076,17 @@ void DesktopShell::openNoteEditor(const char* path) {
   lv_obj_set_style_pad_left(noteBodyArea_, 7, 0);
   lv_obj_set_style_pad_right(noteBodyArea_, 7, 0);
 
-  noteKeyboard_ = lv_keyboard_create(window_);
-  lv_obj_set_pos(noteKeyboard_, 3, 128);
-  lv_obj_set_size(noteKeyboard_, 314, 109);
+  // Keep the keyboard outside the editor's object tree. As a screen-level
+  // system panel it cannot be clipped or covered by the expanding text area.
+  noteKeyboard_ = lv_keyboard_create(screen_);
+  lv_obj_set_pos(noteKeyboard_, 0, 128);
+  lv_obj_set_size(noteKeyboard_, board::SCREEN_WIDTH, 112);
+  lv_obj_add_flag(noteKeyboard_, LV_OBJ_FLAG_FLOATING);
   configureKeyboard(noteKeyboard_);
   lv_obj_add_event_cb(noteKeyboard_, noteHideKeyboardEvent, LV_EVENT_CANCEL,
                       nullptr);
   lv_keyboard_set_textarea(noteKeyboard_, noteTitleArea_);
+  lv_obj_move_foreground(noteKeyboard_);
 
   lv_obj_add_event_cb(noteTitleArea_, noteTextChangedEvent,
                       LV_EVENT_VALUE_CHANGED, nullptr);
@@ -1098,6 +1107,7 @@ void DesktopShell::openNoteEditor(const char* path) {
   if (!path) {
     lv_obj_add_state(noteTitleArea_, LV_STATE_FOCUSED);
     lv_textarea_set_cursor_pos(noteTitleArea_, LV_TEXTAREA_CURSOR_LAST);
+    showNoteKeyboard(noteTitleArea_);
   } else {
     hideNoteKeyboard();
   }
@@ -1182,13 +1192,14 @@ void DesktopShell::applyDesktopColor() {
 
 void DesktopShell::showNoteKeyboard(lv_obj_t* textarea) {
   if (!noteEditorOpen_ || !noteKeyboard_ || !textarea) return;
-  lv_obj_set_pos(noteKeyboard_, 3, 128);
-  lv_obj_set_size(noteKeyboard_, 314, 109);
+  lv_obj_set_pos(noteKeyboard_, 0, 128);
+  lv_obj_set_size(noteKeyboard_, board::SCREEN_WIDTH, 112);
   lv_obj_remove_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_remove_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_set_height(noteBodyArea_, 56);
   lv_obj_move_foreground(noteKeyboard_);
   lv_keyboard_set_textarea(noteKeyboard_, textarea);
+  lv_obj_update_layout(noteKeyboard_);
   lv_obj_invalidate(noteKeyboard_);
   noteKeyboardVisible_ = true;
 }
