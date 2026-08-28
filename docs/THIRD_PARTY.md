@@ -4,6 +4,8 @@
 
 `src/ui/OSEsp32Font12.c` and `src/ui/OSEsp32Font14.c` contain raster glyph data
 generated from **Noto Sans Regular** for the ASCII and Cyrillic Unicode ranges.
+`src/ui/OSEsp32Font16Bold.c` contains the corresponding title subset generated
+from **Noto Sans Bold**.
 
 Noto Sans is Copyright 2012 Google Inc. and is distributed under the
 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

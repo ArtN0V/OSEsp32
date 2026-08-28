@@ -9,6 +9,11 @@ constexpr const char* ROTATION_KEY = "rotate180";
 constexpr const char* WALLPAPER_KEY = "wallpaper";
 constexpr const char* DESKTOP_COLOR_KEY = "desk_color";
 constexpr const char* LANGUAGE_KEY = "language";
+constexpr const char* CLOCK_UTC_KEY = "clock_utc";
+constexpr const char* CLOCK_ZONE_KEY = "clock_zone";
+constexpr const char* SCREEN_SAVER_ENABLED_KEY = "ss_enabled";
+constexpr const char* SCREEN_SAVER_TIMEOUT_KEY = "ss_timeout";
+constexpr const char* SCREEN_SAVER_IMAGE_KEY = "ss_image";
 constexpr uint8_t DEFAULT_BRIGHTNESS = 255;
 constexpr uint8_t MINIMUM_BRIGHTNESS = 25;
 }
@@ -92,6 +97,100 @@ bool SystemSettingsService::saveDesktopColor(uint8_t colorIndex) const {
       preferences.putUChar(DESKTOP_COLOR_KEY, colorIndex) == sizeof(uint8_t);
   preferences.end();
   return saved;
+}
+
+bool SystemSettingsService::loadClock(uint64_t& utcSeconds,
+                                      int16_t& timezoneMinutes) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return false;
+  if (!preferences.isKey(CLOCK_UTC_KEY)) {
+    preferences.end();
+    return false;
+  }
+  utcSeconds = preferences.getULong64(CLOCK_UTC_KEY, 0);
+  timezoneMinutes = static_cast<int16_t>(
+      preferences.getShort(CLOCK_ZONE_KEY, 180));
+  preferences.end();
+  return utcSeconds > 0;
+}
+
+bool SystemSettingsService::saveClock(uint64_t utcSeconds,
+                                      int16_t timezoneMinutes) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool savedUtc =
+      preferences.putULong64(CLOCK_UTC_KEY, utcSeconds) == sizeof(uint64_t);
+  const bool savedZone = preferences.putShort(CLOCK_ZONE_KEY,
+                                               timezoneMinutes) ==
+                         sizeof(int16_t);
+  preferences.end();
+  return savedUtc && savedZone;
+}
+
+bool SystemSettingsService::loadScreenSaverEnabled() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return false;
+  const bool enabled = preferences.getBool(SCREEN_SAVER_ENABLED_KEY, false);
+  preferences.end();
+  return enabled;
+}
+
+bool SystemSettingsService::saveScreenSaverEnabled(bool enabled) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool saved = preferences.putBool(SCREEN_SAVER_ENABLED_KEY, enabled) ==
+                     sizeof(bool);
+  preferences.end();
+  return saved;
+}
+
+uint8_t SystemSettingsService::loadScreenSaverTimeout() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return 2;
+  const uint8_t value = preferences.getUChar(SCREEN_SAVER_TIMEOUT_KEY, 2);
+  preferences.end();
+  return value;
+}
+
+bool SystemSettingsService::saveScreenSaverTimeout(uint8_t timeoutIndex) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool saved = preferences.putUChar(SCREEN_SAVER_TIMEOUT_KEY,
+                                           timeoutIndex) == sizeof(uint8_t);
+  preferences.end();
+  return saved;
+}
+
+bool SystemSettingsService::loadScreenSaverImage(char* path,
+                                                  size_t pathSize) const {
+  if (!path || !pathSize) return false;
+  path[0] = '\0';
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return false;
+  const size_t length =
+      preferences.getString(SCREEN_SAVER_IMAGE_KEY, path, pathSize);
+  preferences.end();
+  return length > 0 && length < pathSize;
+}
+
+bool SystemSettingsService::saveScreenSaverImage(const char* path) const {
+  if (!path || !path[0]) return false;
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const size_t length = strlen(path);
+  const bool saved =
+      preferences.putString(SCREEN_SAVER_IMAGE_KEY, path) == length;
+  preferences.end();
+  return saved;
+}
+
+bool SystemSettingsService::clearScreenSaverImage() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool removed = !preferences.isKey(SCREEN_SAVER_IMAGE_KEY) ||
+                       preferences.remove(SCREEN_SAVER_IMAGE_KEY);
+  preferences.end();
+  return removed;
 }
 
 SystemLanguage SystemSettingsService::loadLanguage() const {

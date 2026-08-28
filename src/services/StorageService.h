@@ -29,6 +29,9 @@ class StorageService {
   bool exists(const char* path) const;
   bool removePath(const char* path);
   bool renamePath(const char* from, const char* to);
+  bool readFile(const char* path, char* buffer, size_t capacity,
+                size_t& length, bool allowTruncate = false);
+  bool writeFileAtomic(const char* path, const uint8_t* data, size_t length);
   bool mounted() const { return mounted_; }
   static bool isImagePath(const char* path);
   static bool makeLvglPath(const char* sdPath, char* output, size_t outputSize);

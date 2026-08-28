@@ -39,6 +39,16 @@ uncompressed, seekable container with:
 - icon and resource sections;
 - CRC32, with SHA-256/signatures added later.
 
+The manifest also declares, without granting by itself:
+
+- application identifier and OSEsp32 API version;
+- requested launch mode: `windowed`, `fullscreen` or `exclusive`;
+- requested Lua memory budget and required capabilities;
+- file classes the application can open or create, such as `image/bmp`.
+
+OSEsp32 policy may reject a package or select a stricter launch mode. A manifest
+request never becomes direct hardware or filesystem access.
+
 Native Xtensa code from SD is explicitly out of scope for version 1 because a
 classic ESP32 cannot isolate a faulty native application from the OS.
 
@@ -56,6 +66,90 @@ SD access single-owner on the no-PSRAM target. Recovery diagnostics remain
 intentionally synchronous. A separate application task is considered in
 Stage 4; it must request storage work through the service instead of touching
 `SD` directly.
+
+## Application lifecycle and memory reclamation
+
+- `windowed` keeps the shell and is intended for small utilities.
+- `fullscreen` covers the desktop but may retain its objects and caches.
+- `exclusive` saves only a compact shell state, closes shell-owned files,
+  destroys desktop LVGL objects, drops wallpaper/image caches and verifies a
+  minimum free-heap and largest-block threshold before creating the VM.
+- Kernel, display/touch ports, serialized storage, memory monitor, watchdog and
+  a system-owned exit path always remain alive. An application cannot replace
+  or hide that recovery mechanism.
+- Lua is created with a quota-aware allocator. An instruction-count hook gives
+  control back to the system and lets it enforce time limits. On exit, the OS
+  stops callbacks, closes every application file handle, destroys application
+  UI, calls `lua_close`, drops application caches, checks for a memory leak and
+  rebuilds the shell from NVS and the compact saved state.
+- The shell is reconstructed, not serialized into RAM. This deliberately
+  trades a short return delay for a larger contiguous block while an exclusive
+  application is running.
+
+General virtual memory is out of scope. ESP32 pointers cannot transparently
+address SD data, and random swap traffic would be slow and fragile. Large data
+must instead use streamed resources or an explicit page-oriented API whose
+objects are handles, not pointers.
+
+## Application storage and capabilities
+
+All application I/O passes through an `AppStorageService` layered over the
+single-owner `StorageService`. Lua never receives `File`, `FILE*`, LVGL drive
+paths or raw SD paths.
+
+Storage namespaces and grants are:
+
+- `app:/` — read-only package resources inside the active `.yap`;
+- `data:/` — read/write private directory
+  `/OSEsp32/Data/<application-id>/`, available only to that application;
+- user documents — no ambient directory access. A system-owned Open or Save
+  dialog returns an opaque capability for the exact file selected by the user.
+  A capability carries allowed operations and expires when the app exits.
+
+Version 1 file operations are bounded `open`, `read`, `write`, `seek`, `size`,
+`flush`, `close`, `stat` and private-directory listing. The service canonicalizes
+paths, rejects traversal/control characters, limits path and filename length,
+caps open handles per application, checks free-space reserve and performs I/O
+in small cooperative chunks. Every operation returns a stable error such as
+`not_found`, `permission_denied`, `storage_removed`, `no_space`, `io_error` or
+`quota_exceeded`.
+
+Application write modes explicitly distinguish create-new, truncate, append
+and transactional replace. They do not reuse the LVGL viewer bridge's generic
+write mode or its heap-allocated `File` handles. The application layer uses a
+fixed handle table and a stricter component-by-component canonicalizer.
+
+Save/replace is transactional at the service level: write and flush a sibling
+temporary file, preserve an existing destination as a backup, rename the
+temporary file into place, then remove the backup. Boot/mount recovery resolves
+recognized `.tmp`/`.bak` remnants. Applications cannot implement this sequence
+with unrestricted rename/delete calls.
+
+On SD removal, all affected handles become invalid and pending calls return
+`storage_removed`. The runtime pauses the app and presents a system-owned
+Retry/Close decision. It never silently redirects user documents to internal
+flash. Package code already resident in RAM is not treated as proof that the
+removed card or a newly inserted card is the same volume.
+
+## Paint reference architecture
+
+Paint uses the same public APIs expected of third-party `.yap` applications:
+
+- Open/Save dialogs grant one BMP document at a time; the manifest requests
+  BMP read/create/replace capability but does not grant arbitrary SD access.
+- BMP headers and rows are decoded/encoded incrementally. Initial import covers
+  uncompressed 16/24/32-bit BMP. Save As emits interoperable uncompressed
+  24-bit BGR rows with required four-byte padding through transactional replace.
+- When both Viewer and Paint handle BMP, the shell owns an **Open with** choice
+  and optional default association. A package cannot silently take over an
+  existing file type.
+- Pixel storage belongs to a native `Canvas` service. Lua sees drawing methods
+  and events, never a table containing every pixel.
+- First preference is a memory-measured exclusive canvas: RGB565 only if a
+  safe contiguous allocation remains, otherwise an indexed canvas. A bounded
+  tile cache backed by `data:/tmp/` is a later fallback, not general swap.
+- The editor tracks a dirty flag. Close, SD removal and write failure preserve
+  the in-memory drawing where possible and ask the user before discarding it.
 
 ## Stage 3 image policy
 
@@ -85,3 +179,32 @@ Stage 4; it must request storage work through the service instead of touching
   locale.
 - The selected desktop gradient is a small NVS index. It remains independent
   from wallpaper state and becomes visible whenever wallpaper is absent.
+
+## Stage 3 notes policy
+
+- Notes are built-in documents, not unrestricted application storage. They
+  live under `/OSEsp32/Notes` and are accessed through `NotesService` over the
+  single-owner `StorageService`.
+- The gallery keeps only bounded summaries in RAM. One editor owns one bounded
+  title/body buffer; no note is mapped directly from SD.
+- Save uses the storage service's temporary-file, backup and rename sequence.
+  The editor retains dirty text and refuses to pretend it saved if the SD card
+  is missing or a write fails.
+- The editor is fullscreen and sets the same shell lifecycle flag that future
+  fullscreen `.yap` applications use. This suppresses the screen saver without
+  coupling the saver to Notes specifically.
+
+## Stage 3 clock and screen-saver policy
+
+- `DateTimeService` owns UTC, elapsed-time accounting and a local UTC offset.
+  Manual entry is the current source; a future network service will submit NTP
+  results only through `setUtc()`.
+- NVS stores a checkpoint, not powered-off elapsed time. Without a battery RTC
+  or network synchronization, the clock cannot stay accurate across complete
+  power loss.
+- Screen-saver activation uses LVGL's display inactivity counter. Fullscreen
+  activity suppresses it, and a wake event resets activity.
+- A saver background keeps its original SD path and may decode slowly on
+  entry. It deliberately does not use the desktop OWP cache. On wake, the
+  complete saver object tree and its exact image cache entry are discarded so
+  the steady-state shell does not pay its memory cost.

@@ -4,6 +4,7 @@
 
 #include <esp_heap_caps.h>
 #include <esp_system.h>
+#include <misc/cache/instance/lv_image_cache.h>
 
 #include "../board/BoardConfig.h"
 
@@ -39,45 +40,80 @@ constexpr DesktopColorOption DESKTOP_COLORS[] = {
 };
 constexpr uint8_t DESKTOP_COLOR_COUNT =
     sizeof(DESKTOP_COLORS) / sizeof(DESKTOP_COLORS[0]);
+constexpr uint32_t SCREEN_SAVER_TIMEOUTS[] = {60000, 120000, 300000, 600000,
+                                               1800000};
+constexpr uint8_t SCREEN_SAVER_TIMEOUT_COUNT =
+    sizeof(SCREEN_SAVER_TIMEOUTS) / sizeof(SCREEN_SAVER_TIMEOUTS[0]);
+constexpr uint8_t NOTE_CREATE_INDEX = 0xFF;
+
+uint8_t daysInMonth(int year, int month) {
+  static constexpr uint8_t DAYS[] = {31, 28, 31, 30, 31, 30,
+                                     31, 31, 30, 31, 30, 31};
+  if (month == 2) {
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    return leap ? 29 : 28;
+  }
+  return DAYS[month - 1];
+}
 
 const char* const RUSSIAN_KEYBOARD_LOWER[] = {
-    "1#", "й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х",
+    "1#", "й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х", "ъ",
     LV_SYMBOL_BACKSPACE, "\n",
-    "ABC", "ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э", "\n",
-    "я", "ч", "с", "м", "и", "т", "ь", "б", "ю", ".", ",", "\n",
+    "ABC", "ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э",
+    LV_SYMBOL_NEW_LINE, "\n",
+    "ё", "я", "ч", "с", "м", "и", "т", "ь", "б", "ю", ".", ",", "\n",
     LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
 
 const char* const RUSSIAN_KEYBOARD_UPPER[] = {
-    "1#", "Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х",
+    "1#", "Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х", "Ъ",
     LV_SYMBOL_BACKSPACE, "\n",
-    "abc", "Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э", "\n",
-    "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", ".", ",", "\n",
+    "abc", "Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э",
+    LV_SYMBOL_NEW_LINE, "\n",
+    "Ё", "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", ".", ",", "\n",
     LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
 
+constexpr lv_buttonmatrix_ctrl_t keyboardControl(uint16_t flags,
+                                                  uint8_t width) {
+  return static_cast<lv_buttonmatrix_ctrl_t>(flags | width);
+}
+
 const lv_buttonmatrix_ctrl_t RUSSIAN_KEYBOARD_CONTROLS[] = {
-    LV_BUTTONMATRIX_CTRL_WIDTH_2,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_2,
-    LV_BUTTONMATRIX_CTRL_WIDTH_2,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1, LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_1,
-    LV_BUTTONMATRIX_CTRL_WIDTH_2, LV_BUTTONMATRIX_CTRL_WIDTH_2,
-    LV_BUTTONMATRIX_CTRL_WIDTH_6, LV_BUTTONMATRIX_CTRL_WIDTH_2,
-    LV_BUTTONMATRIX_CTRL_WIDTH_2};
+    // Mode, 12 letters, Backspace.
+    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 5),
+    // Shift, 11 letters, Enter.
+    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 5),
+    // Ё, 9 letters and punctuation.
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 2),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 2),
+    // Hide, cursor left, visible space area, cursor right, Done.
+    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 3),
+    keyboardControl(0, 10),
+    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 3),
+    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4)};
+static_assert(sizeof(RUSSIAN_KEYBOARD_CONTROLS) /
+                  sizeof(RUSSIAN_KEYBOARD_CONTROLS[0]) ==
+              44,
+              "Russian keyboard map and control map must stay aligned");
 
 void configurePanel(lv_obj_t* object, uint32_t color, int radius = 0) {
   lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
@@ -99,7 +135,14 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   language_ = settings_.loadLanguage();
   desktopColor_ = settings_.loadDesktopColor();
   if (desktopColor_ >= DESKTOP_COLOR_COUNT) desktopColor_ = 0;
+  screenSaverEnabled_ = settings_.loadScreenSaverEnabled();
+  screenSaverTimeoutIndex_ = settings_.loadScreenSaverTimeout();
+  if (screenSaverTimeoutIndex_ >= SCREEN_SAVER_TIMEOUT_COUNT)
+    screenSaverTimeoutIndex_ = 2;
+  settings_.loadScreenSaverImage(screenSaverImagePath_,
+                                 sizeof(screenSaverImagePath_));
   localization_.setLanguage(language_);
+  dateTime_.begin(settings_);
   if (!port_.begin(rotation180_, uiFont())) {
     kernel_->faults().report(FaultCode::InternalError, "shell",
                              "LVGL port initialization failed");
@@ -107,6 +150,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   }
 
   storage_.begin(kernel_->events(), kernel_->logger());
+  notes_.begin(storage_);
   storage_.registerLvglDriver();
   wallpaperService_.begin(storage_, kernel_->logger());
   previousStorageMounted_ = storage_.mounted();
@@ -133,14 +177,27 @@ void DesktopShell::update() {
     if (previousStorageMounted_)
       applyWallpaper();
     else {
-      closeWindow();
+      hideScreenSaver();
+      if (!noteEditorOpen_) closeWindow();
       removeWallpaper();
       setTaskText(tr("SD card removed", "SD-карта извлечена"));
+      if (noteEditorOpen_)
+        showInfoDialog(tr("SD card removed. The note stays open, but it cannot "
+                          "be saved until the card returns.",
+                          "SD-карта извлечена. Заметка останется открытой, но "
+                          "сохранение невозможно до возврата карты."));
     }
   }
   if (calibration_.active()) updateCalibration();
   updateClock();
+  updateScreenSaver();
   delay(2);
+}
+
+void DesktopShell::setFullscreenApplicationActive(bool active) {
+  fullscreenApplicationActive_ = active;
+  if (active) hideScreenSaver();
+  lv_display_trigger_activity(nullptr);
 }
 
 lv_obj_t* DesktopShell::createButton(lv_obj_t* parent, const char* text,
@@ -281,6 +338,20 @@ lv_obj_t* DesktopShell::createColorChoice(lv_obj_t* parent,
   return choice;
 }
 
+void DesktopShell::configureKeyboard(lv_obj_t* keyboard) {
+  lv_obj_set_style_pad_all(keyboard, 2, 0);
+  lv_obj_set_style_pad_row(keyboard, 2, 0);
+  lv_obj_set_style_pad_column(keyboard, 2, 0);
+  lv_obj_set_style_text_font(keyboard, uiSmallFont(), LV_PART_ITEMS);
+  if (language_ == SystemLanguage::Russian) {
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER,
+                        RUSSIAN_KEYBOARD_LOWER, RUSSIAN_KEYBOARD_CONTROLS);
+    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER,
+                        RUSSIAN_KEYBOARD_UPPER, RUSSIAN_KEYBOARD_CONTROLS);
+    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+  }
+}
+
 void DesktopShell::buildDesktop() {
   screen_ = lv_screen_active();
   configurePanel(screen_, COLOR_DESKTOP_TOP);
@@ -298,8 +369,8 @@ void DesktopShell::buildDesktop() {
                         ShellAppId::Settings);
   createDesktopShortcut(LV_SYMBOL_LIST, tr("System\nInfo", "Сведения"), 0x79D1FF, 153, 28,
                         ShellAppId::SystemInfo);
-  createDesktopShortcut(LV_SYMBOL_KEYBOARD, tr("Text\nInput", "Ввод\nтекста"), 0xE9EEF2, 227, 28,
-                        ShellAppId::TextInput);
+  createDesktopShortcut(LV_SYMBOL_EDIT, tr("Notes", "Заметки"), 0xFFF2A8, 227, 28,
+                        ShellAppId::Notes);
 
   buildTaskbar();
   buildStartMenu();
@@ -342,7 +413,7 @@ void DesktopShell::buildStartMenu() {
 
   const char* names[] = {tr("Files", "Файлы"), tr("Settings", "Настройки"),
                          tr("System Info", "Сведения о системе"),
-                         tr("Text Input", "Ввод текста"),
+                         tr("Notes", "Заметки"),
                          tr("About", "О системе")};
   for (uint8_t index = 0; index < 5; ++index) {
     createButton(startMenu_, names[index], 7, 28 + index * 28, 160, 25,
@@ -391,6 +462,14 @@ void DesktopShell::closeWindow() {
     lv_obj_delete(window_);
     window_ = nullptr;
   }
+  noteTitleArea_ = nullptr;
+  noteBodyArea_ = nullptr;
+  noteKeyboard_ = nullptr;
+  noteHideKeyboardButton_ = nullptr;
+  dateTimeContent_ = nullptr;
+  noteEditorOpen_ = false;
+  noteKeyboardVisible_ = false;
+  fullscreenApplicationActive_ = false;
   setTaskText(tr("Desktop", "Рабочий стол"));
 }
 
@@ -446,7 +525,7 @@ void DesktopShell::openApp(ShellAppId app) {
     case ShellAppId::Files: openFiles(); break;
     case ShellAppId::Settings: openSettings(); break;
     case ShellAppId::SystemInfo: openSystemInfo(); break;
-    case ShellAppId::TextInput: openTextInput(); break;
+    case ShellAppId::Notes: openNotes(); break;
     case ShellAppId::About: openAbout(); break;
   }
 }
@@ -540,13 +619,19 @@ void DesktopShell::openImage(const char* path) {
   lv_obj_set_style_bg_opa(image, LV_OPA_COVER, 0);
   lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CENTER);
   lv_image_set_src(image, selectedImageLvPath_);
-  createButton(content, tr("FILES", "ФАЙЛЫ"), 5, 127, 70, 30, imageBackEvent);
-  createButton(content, tr("SET WALLPAPER", "СДЕЛАТЬ ФОНОМ"), 105, 127, 194, 30,
+  createButton(content, tr("FILES", "ФАЙЛЫ"), 5, 127, 58, 30,
+               imageBackEvent);
+  createButton(content, tr("WALLPAPER", "ОБОИ"), 68, 127, 112, 30,
                setWallpaperEvent);
+  createButton(content, tr("SAVER", "ЗАСТАВКА"), 185, 127, 114, 30,
+               setScreenSaverImageEvent);
 }
 
 void DesktopShell::openSettings() {
   lv_obj_t* content = createWindow(tr("Settings", "Параметры"));
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
   createSettingsRow(content, LV_SYMBOL_IMAGE, tr("Display", "Экран"),
                     tr("Brightness, rotation and wallpaper",
                        "Яркость, поворот и обои"),
@@ -559,6 +644,18 @@ void DesktopShell::openSettings() {
                     tr("Calibration and touch coordinates",
                        "Калибровка и координаты"),
                     105, settingsTouchEvent);
+  char dateSummary[40];
+  dateTime_.formatDateTime(dateSummary, sizeof(dateSummary));
+  createSettingsRow(content, LV_SYMBOL_REFRESH,
+                    tr("Date & time", "Дата и время"),
+                    dateTime_.valid() ? dateSummary
+                                      : tr("Not set", "Не установлены"),
+                    156, settingsDateTimeEvent);
+  createSettingsRow(content, LV_SYMBOL_IMAGE,
+                    tr("Screen saver", "Заставка"),
+                    screenSaverEnabled_ ? tr("On", "Включена")
+                                        : tr("Off", "Выключена"),
+                    207, settingsScreenSaverEvent);
 }
 
 void DesktopShell::openDisplaySettings() {
@@ -656,6 +753,118 @@ void DesktopShell::openTouchSettings() {
   lv_obj_set_pos(detailLabel, 10, 92);
 }
 
+void DesktopShell::prepareDateTimeEdit() {
+  if (!dateTime_.localTime(pendingDateTime_)) {
+    memset(&pendingDateTime_, 0, sizeof(pendingDateTime_));
+    pendingDateTime_.tm_year = 126;
+    pendingDateTime_.tm_mon = 0;
+    pendingDateTime_.tm_mday = 1;
+    pendingDateTime_.tm_hour = 12;
+  }
+  pendingTimezoneMinutes_ = dateTime_.timezoneMinutes();
+  dateTimeEditPrepared_ = true;
+}
+
+void DesktopShell::openDateTimeSettings() {
+  if (!dateTimeEditPrepared_) prepareDateTimeEdit();
+  lv_obj_t* content = createWindow(tr("Date & time", "Дата и время"));
+  dateTimeContent_ = content;
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsBackEvent);
+  lv_obj_t* note = lv_label_create(content);
+  lv_label_set_text(note, tr("Manual now; Internet sync later",
+                             "Сейчас вручную; позже через интернет"));
+  lv_obj_set_style_text_font(note, uiSmallFont(), 0);
+  lv_obj_set_pos(note, 76, 10);
+
+  const char* namesEn[] = {"Year", "Month", "Day", "Hour", "Minute", "UTC"};
+  const char* namesRu[] = {"Год", "Месяц", "День", "Час", "Минута", "UTC"};
+  const int values[] = {pendingDateTime_.tm_year + 1900,
+                        pendingDateTime_.tm_mon + 1,
+                        pendingDateTime_.tm_mday,
+                        pendingDateTime_.tm_hour,
+                        pendingDateTime_.tm_min,
+                        pendingTimezoneMinutes_};
+  for (uint8_t field = 0; field < 6; ++field) {
+    const int16_t y = 40 + field * 39;
+    lv_obj_t* label = lv_label_create(content);
+    lv_label_set_text(label, tr(namesEn[field], namesRu[field]));
+    lv_obj_set_pos(label, 12, y + 9);
+    createButton(content, "-", 112, y, 38, 32, dateTimeAdjustEvent,
+                 reinterpret_cast<void*>(static_cast<uintptr_t>(field * 2)));
+    char value[20];
+    if (field == 5) {
+      const int absoluteMinutes = abs(values[field]);
+      snprintf(value, sizeof(value), "UTC%c%02d:%02d",
+               values[field] < 0 ? '-' : '+', absoluteMinutes / 60,
+               absoluteMinutes % 60);
+    } else
+      snprintf(value, sizeof(value), field == 0 ? "%04d" : "%02d",
+               values[field]);
+    lv_obj_t* valueLabel = lv_label_create(content);
+    lv_label_set_text(valueLabel, value);
+    lv_obj_set_pos(valueLabel, 158, y + 9);
+    lv_obj_set_width(valueLabel, 88);
+    lv_obj_set_style_text_align(valueLabel, LV_TEXT_ALIGN_CENTER, 0);
+    createButton(content, "+", 256, y, 38, 32, dateTimeAdjustEvent,
+                 reinterpret_cast<void*>(
+                     static_cast<uintptr_t>(field * 2 + 1)));
+  }
+  createButton(content, tr("SAVE DATE AND TIME", "СОХРАНИТЬ ДАТУ И ВРЕМЯ"),
+               12, 280, 282, 34, dateTimeSaveEvent);
+  lv_obj_update_layout(content);
+  lv_obj_scroll_to_y(content, dateTimeScrollY_, LV_ANIM_OFF);
+}
+
+void DesktopShell::openScreenSaverSettings() {
+  lv_obj_t* content = createWindow(tr("Screen saver", "Заставка"));
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+  createButton(content, tr("BACK", "НАЗАД"), 5, 4, 62, 27,
+               settingsBackEvent);
+
+  createSettingsRow(content, LV_SYMBOL_POWER,
+                    tr("Screen saver", "Заставка"),
+                    screenSaverEnabled_ ? tr("On", "Включена")
+                                        : tr("Off", "Выключена"),
+                    39, screenSaverEnabledEvent);
+  char timeout[32];
+  const uint32_t minutes =
+      SCREEN_SAVER_TIMEOUTS[screenSaverTimeoutIndex_] / 60000;
+  snprintf(timeout, sizeof(timeout), language_ == SystemLanguage::Russian
+             ? "%lu мин. бездействия" : "%lu min inactive",
+           static_cast<unsigned long>(minutes));
+  createSettingsRow(content, LV_SYMBOL_REFRESH,
+                    tr("Start after", "Запускать через"), timeout,
+                    90, screenSaverTimeoutEvent);
+  const char* imageName = strrchr(screenSaverImagePath_, '/');
+  createSettingsRow(content, LV_SYMBOL_IMAGE,
+                    tr("Background", "Фон"),
+                    screenSaverImagePath_[0]
+                        ? (imageName ? imageName + 1 : screenSaverImagePath_)
+                        : tr("Clock on dark background",
+                             "Часы на тёмном фоне"),
+                    141, screenSaverChooseImageEvent);
+  if (screenSaverImagePath_[0])
+    createSettingsRow(content, LV_SYMBOL_TRASH,
+                      tr("Clear background image", "Убрать фоновую картинку"),
+                      tr("Keep date and time", "Оставить дату и время"),
+                      192, screenSaverClearImageEvent);
+
+  lv_obj_t* help = lv_label_create(content);
+  lv_label_set_text(help, tr(
+      "Choose a picture in Files, open it, then tap SAVER.",
+      "Выберите картинку в Файлах, откройте её и нажмите ЗАСТАВКА."));
+  lv_obj_set_style_text_font(help, uiSmallFont(), 0);
+  lv_obj_set_width(help, 280);
+  lv_label_set_long_mode(help, LV_LABEL_LONG_WRAP);
+  lv_obj_set_pos(help, 12, screenSaverImagePath_[0] ? 247 : 200);
+}
+
 void DesktopShell::openSystemInfo() {
   lv_obj_t* content = createWindow(tr("System Info", "Сведения о системе"));
   const MemorySnapshot memory = kernel_->monitor().sample();
@@ -682,31 +891,178 @@ void DesktopShell::openSystemInfo() {
                diagnosticsEvent);
 }
 
-void DesktopShell::openTextInput() {
-  lv_obj_t* content = createWindow(tr("Text Input", "Ввод текста"));
-  lv_obj_t* textarea = lv_textarea_create(content);
-  lv_obj_set_pos(textarea, 5, 2);
-  lv_obj_set_size(textarea, 295, 31);
-  lv_textarea_set_one_line(textarea, true);
-  lv_textarea_set_placeholder_text(
-      textarea, tr("Touch here and type...", "Нажмите и введите текст..."));
-
-  lv_obj_t* keyboard = lv_keyboard_create(content);
-  lv_obj_set_pos(keyboard, 3, 35);
-  lv_obj_set_size(keyboard, 299, 123);
-  lv_obj_set_style_pad_all(keyboard, 2, 0);
-  lv_obj_set_style_pad_row(keyboard, 2, 0);
-  lv_obj_set_style_pad_column(keyboard, 2, 0);
-  lv_obj_set_style_text_font(keyboard, uiSmallFont(), LV_PART_ITEMS);
-  if (language_ == SystemLanguage::Russian) {
-    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER,
-                        RUSSIAN_KEYBOARD_LOWER, RUSSIAN_KEYBOARD_CONTROLS);
-    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER,
-                        RUSSIAN_KEYBOARD_UPPER, RUSSIAN_KEYBOARD_CONTROLS);
-    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+void DesktopShell::openNotes() {
+  noteEditorOpen_ = false;
+  noteDirty_ = false;
+  noteCount_ = notes_.list(noteSummaries_, NotesService::MAX_NOTES);
+  lv_obj_t* content = createWindow(tr("Notes", "Заметки"));
+  if (!storage_.mounted()) {
+    lv_obj_t* label = lv_label_create(content);
+    lv_label_set_text(label, tr(
+        "Notes need an SD card.\nInsert the card and reopen Notes.",
+        "Для заметок нужна SD-карта.\nВставьте карту и откройте Заметки."));
+    lv_obj_set_pos(label, 14, 24);
+    return;
   }
-  lv_keyboard_set_textarea(keyboard, textarea);
-  lv_obj_add_state(textarea, LV_STATE_FOCUSED);
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+
+  for (uint8_t cardIndex = 0; cardIndex <= noteCount_; ++cardIndex) {
+    const int16_t x = 4 + (cardIndex % 3) * 99;
+    const int16_t y = 4 + (cardIndex / 3) * 99;
+    lv_obj_t* card = lv_button_create(content);
+    lv_obj_set_pos(card, x, y);
+    lv_obj_set_size(card, 92, 91);
+    lv_obj_set_style_radius(card, 9, 0);
+    lv_obj_set_style_bg_color(card, lv_color_hex(0xFFFDF2), 0);
+    lv_obj_set_style_bg_color(card, lv_color_hex(0xE8F3FF), LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(0xC8C5B8), 0);
+    lv_obj_set_style_shadow_width(card, 3, 0);
+    lv_obj_set_style_shadow_opa(card, LV_OPA_20, 0);
+    lv_obj_set_style_pad_all(card, 0, 0);
+    const uint8_t noteIndex = cardIndex == 0 ? NOTE_CREATE_INDEX
+                                             : cardIndex - 1;
+    lv_obj_add_event_cb(
+        card, noteCardEvent, LV_EVENT_CLICKED,
+        reinterpret_cast<void*>(static_cast<uintptr_t>(noteIndex)));
+
+    if (cardIndex == 0) {
+      lv_obj_t* plus = lv_label_create(card);
+      lv_label_set_text(plus, "+");
+      lv_obj_set_style_text_font(plus, &lv_font_montserrat_28, 0);
+      lv_obj_set_style_text_color(plus, lv_color_hex(COLOR_ACCENT), 0);
+      lv_obj_set_pos(plus, 0, 13);
+      lv_obj_set_width(plus, 92);
+      lv_obj_set_style_text_align(plus, LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_t* title = lv_label_create(card);
+      lv_label_set_text(title, tr("New note", "Новая заметка"));
+      lv_obj_set_style_text_font(title, uiSmallFont(), 0);
+      lv_obj_set_style_text_color(title, lv_color_hex(0x303030), 0);
+      lv_obj_set_pos(title, 5, 67);
+      lv_obj_set_width(title, 82);
+      lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+      lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+      continue;
+    }
+
+    const NoteSummary& summary = noteSummaries_[noteIndex];
+    lv_obj_t* preview = lv_label_create(card);
+    lv_label_set_text(preview,
+                      summary.preview[0] ? summary.preview : tr("Empty note", "Пустая заметка"));
+    lv_obj_set_style_text_font(preview, uiSmallFont(), 0);
+    lv_obj_set_style_text_color(preview, lv_color_hex(0x505050), 0);
+    lv_obj_set_pos(preview, 7, 7);
+    lv_obj_set_size(preview, 78, 51);
+    lv_label_set_long_mode(preview, LV_LABEL_LONG_CLIP);
+
+    lv_obj_t* title = lv_label_create(card);
+    lv_label_set_text(title,
+                      summary.title[0] ? summary.title : tr("Untitled", "Без названия"));
+    lv_obj_set_style_text_font(title, uiSmallFont(), 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x202020), 0);
+    lv_obj_set_pos(title, 7, 67);
+    lv_obj_set_width(title, 78);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+  }
+}
+
+void DesktopShell::openNoteEditor(const char* path) {
+  closeWindow();
+  strlcpy(notePath_, path ? path : "", sizeof(notePath_));
+  noteTitle_[0] = '\0';
+  noteBody_[0] = '\0';
+  if (path && !notes_.load(path, noteTitle_, sizeof(noteTitle_), noteBody_,
+                           sizeof(noteBody_))) {
+    openNotes();
+    showInfoDialog(tr("Could not open this note.",
+                      "Не удалось открыть заметку."));
+    return;
+  }
+
+  window_ = lv_obj_create(screen_);
+  lv_obj_set_pos(window_, 0, 0);
+  lv_obj_set_size(window_, board::SCREEN_WIDTH, board::SCREEN_HEIGHT);
+  configurePanel(window_, 0xFFFFFF);
+  lv_obj_move_foreground(window_);
+
+  lv_obj_t* toolbar = lv_obj_create(window_);
+  lv_obj_set_pos(toolbar, 0, 0);
+  lv_obj_set_size(toolbar, 320, 32);
+  configurePanel(toolbar, COLOR_TITLE);
+  createButton(toolbar, LV_SYMBOL_LEFT, 3, 2, 40, 28, noteBackEvent);
+  lv_obj_t* caption = lv_label_create(toolbar);
+  lv_label_set_text(caption, tr("Note", "Заметка"));
+  lv_obj_set_pos(caption, 51, 8);
+  lv_obj_set_style_text_color(caption, lv_color_white(), 0);
+  noteHideKeyboardButton_ = createButton(
+      toolbar, LV_SYMBOL_KEYBOARD, 220, 2, 43, 28,
+      noteHideKeyboardEvent);
+  createButton(toolbar, LV_SYMBOL_SAVE, 268, 2, 49, 28, noteSaveEvent);
+
+  noteTitleArea_ = lv_textarea_create(window_);
+  lv_obj_set_pos(noteTitleArea_, 5, 34);
+  lv_obj_set_size(noteTitleArea_, 310, 34);
+  lv_textarea_set_one_line(noteTitleArea_, true);
+  lv_textarea_set_max_length(noteTitleArea_,
+                             NotesService::MAX_TITLE_CHARACTERS);
+  lv_textarea_set_cursor_click_pos(noteTitleArea_, true);
+  lv_textarea_set_placeholder_text(noteTitleArea_,
+                                   tr("Title", "Заголовок"));
+  lv_textarea_set_text(noteTitleArea_, noteTitle_);
+  lv_obj_set_style_text_font(noteTitleArea_, &osesp32_font_16_bold, 0);
+  lv_obj_set_style_border_width(noteTitleArea_, 0, 0);
+  lv_obj_set_style_radius(noteTitleArea_, 0, 0);
+  lv_obj_set_style_pad_left(noteTitleArea_, 7, 0);
+  lv_obj_set_style_pad_right(noteTitleArea_, 7, 0);
+
+  noteBodyArea_ = lv_textarea_create(window_);
+  lv_obj_set_pos(noteBodyArea_, 5, 69);
+  lv_obj_set_size(noteBodyArea_, 310, 56);
+  lv_textarea_set_one_line(noteBodyArea_, false);
+  lv_textarea_set_max_length(noteBodyArea_,
+                             NotesService::MAX_BODY_CHARACTERS);
+  lv_textarea_set_cursor_click_pos(noteBodyArea_, true);
+  lv_textarea_set_placeholder_text(noteBodyArea_,
+                                   tr("Write a note...", "Текст заметки..."));
+  lv_textarea_set_text(noteBodyArea_, noteBody_);
+  lv_obj_set_scrollbar_mode(noteBodyArea_, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_set_style_border_width(noteBodyArea_, 0, 0);
+  lv_obj_set_style_radius(noteBodyArea_, 0, 0);
+  lv_obj_set_style_pad_left(noteBodyArea_, 7, 0);
+  lv_obj_set_style_pad_right(noteBodyArea_, 7, 0);
+
+  noteKeyboard_ = lv_keyboard_create(window_);
+  lv_obj_set_pos(noteKeyboard_, 3, 128);
+  lv_obj_set_size(noteKeyboard_, 314, 109);
+  configureKeyboard(noteKeyboard_);
+  lv_obj_add_event_cb(noteKeyboard_, noteHideKeyboardEvent, LV_EVENT_CANCEL,
+                      nullptr);
+  lv_keyboard_set_textarea(noteKeyboard_, noteTitleArea_);
+
+  lv_obj_add_event_cb(noteTitleArea_, noteTextChangedEvent,
+                      LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_add_event_cb(noteBodyArea_, noteTextChangedEvent,
+                      LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_add_event_cb(noteTitleArea_, noteTextFocusedEvent, LV_EVENT_FOCUSED,
+                      nullptr);
+  lv_obj_add_event_cb(noteBodyArea_, noteTextFocusedEvent, LV_EVENT_FOCUSED,
+                      nullptr);
+  lv_obj_add_event_cb(noteTitleArea_, noteTitleReadyEvent, LV_EVENT_READY,
+                      nullptr);
+
+  noteEditorOpen_ = true;
+  noteDirty_ = false;
+  noteKeyboardVisible_ = true;
+  fullscreenApplicationActive_ = true;
+  setTaskText(tr("Notes", "Заметки"));
+  if (!path) {
+    lv_obj_add_state(noteTitleArea_, LV_STATE_FOCUSED);
+    lv_textarea_set_cursor_pos(noteTitleArea_, LV_TEXTAREA_CURSOR_LAST);
+  } else {
+    hideNoteKeyboard();
+  }
 }
 
 void DesktopShell::openAbout() {
@@ -730,9 +1086,7 @@ void DesktopShell::updateClock() {
   if (seconds == lastClockSecond_) return;
   lastClockSecond_ = seconds;
   char clock[12];
-  snprintf(clock, sizeof(clock), "%02lu:%02lu",
-           static_cast<unsigned long>((seconds / 60) % 100),
-           static_cast<unsigned long>(seconds % 60));
+  dateTime_.formatTime(clock, sizeof(clock));
   lv_label_set_text(clockLabel_, clock);
 }
 
@@ -786,6 +1140,221 @@ void DesktopShell::applyDesktopColor() {
   lv_obj_set_style_bg_grad_color(screen_, lv_color_hex(option.bottom), 0);
   lv_obj_set_style_bg_grad_dir(screen_, LV_GRAD_DIR_VER, 0);
   lv_obj_invalidate(screen_);
+}
+
+void DesktopShell::showNoteKeyboard(lv_obj_t* textarea) {
+  if (!noteEditorOpen_ || !noteKeyboard_ || !textarea) return;
+  lv_keyboard_set_textarea(noteKeyboard_, textarea);
+  lv_obj_remove_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_remove_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_height(noteBodyArea_, 56);
+  noteKeyboardVisible_ = true;
+}
+
+void DesktopShell::hideNoteKeyboard() {
+  if (!noteKeyboard_) return;
+  lv_keyboard_set_textarea(noteKeyboard_, nullptr);
+  if (noteTitleArea_) lv_obj_remove_state(noteTitleArea_, LV_STATE_FOCUSED);
+  if (noteBodyArea_) lv_obj_remove_state(noteBodyArea_, LV_STATE_FOCUSED);
+  lv_obj_add_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
+  if (noteHideKeyboardButton_)
+    lv_obj_add_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
+  if (noteBodyArea_) lv_obj_set_height(noteBodyArea_, 166);
+  noteKeyboardVisible_ = false;
+}
+
+bool DesktopShell::saveCurrentNote() {
+  if (!noteEditorOpen_ || !storage_.mounted()) {
+    showInfoDialog(tr("Insert the SD card before saving.",
+                      "Вставьте SD-карту перед сохранением."));
+    return false;
+  }
+  const char* title = lv_textarea_get_text(noteTitleArea_);
+  const char* body = lv_textarea_get_text(noteBodyArea_);
+  if (!title[0]) {
+    title = tr("Untitled", "Без названия");
+    lv_textarea_set_text(noteTitleArea_, title);
+  }
+  if (!notes_.save(notePath_, sizeof(notePath_), title, body)) {
+    showInfoDialog(tr("Could not save the note.",
+                      "Не удалось сохранить заметку."));
+    return false;
+  }
+  noteDirty_ = false;
+  setTaskText(tr("Note saved", "Заметка сохранена"));
+  return true;
+}
+
+void DesktopShell::requestNoteExit() {
+  if (!noteEditorOpen_) return;
+  if (noteDirty_) {
+    showNoteExitDialog();
+    return;
+  }
+  closeWindow();
+  openNotes();
+}
+
+void DesktopShell::showNoteExitDialog() {
+  closeDialog();
+  dialog_ = lv_obj_create(screen_);
+  lv_obj_set_pos(dialog_, 20, 62);
+  lv_obj_set_size(dialog_, 280, 114);
+  configurePanel(dialog_, 0xF7F7F7, 4);
+  lv_obj_set_style_border_width(dialog_, 2, 0);
+  lv_obj_set_style_border_color(dialog_, lv_color_hex(COLOR_TITLE), 0);
+  lv_obj_t* message = lv_label_create(dialog_);
+  lv_label_set_text(message,
+                    tr("Save changes before closing?",
+                       "Сохранить изменения перед выходом?"));
+  lv_obj_set_pos(message, 12, 14);
+  lv_obj_set_width(message, 256);
+  lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, 0);
+  createButton(dialog_, tr("SAVE", "СОХР."), 7, 70, 80, 32,
+               noteExitSaveEvent);
+  createButton(dialog_, tr("DON'T SAVE", "НЕ СОХР."), 95, 70, 90, 32,
+               noteExitDiscardEvent);
+  createButton(dialog_, tr("CANCEL", "ОТМЕНА"), 193, 70, 80, 32,
+               cancelDialogEvent);
+  lv_obj_move_foreground(dialog_);
+}
+
+void DesktopShell::adjustPendingDateTime(uint8_t field, int8_t delta) {
+  switch (field) {
+    case 0:
+      pendingDateTime_.tm_year = constrain(pendingDateTime_.tm_year + delta,
+                                           120, 199);
+      break;
+    case 1:
+      pendingDateTime_.tm_mon += delta;
+      if (pendingDateTime_.tm_mon < 0) pendingDateTime_.tm_mon = 11;
+      if (pendingDateTime_.tm_mon > 11) pendingDateTime_.tm_mon = 0;
+      break;
+    case 2:
+      pendingDateTime_.tm_mday += delta;
+      break;
+    case 3:
+      pendingDateTime_.tm_hour =
+          (pendingDateTime_.tm_hour + delta + 24) % 24;
+      break;
+    case 4:
+      pendingDateTime_.tm_min =
+          (pendingDateTime_.tm_min + delta + 60) % 60;
+      break;
+    case 5:
+      pendingTimezoneMinutes_ = constrain(
+          pendingTimezoneMinutes_ + static_cast<int16_t>(delta) * 30,
+          -720, 840);
+      break;
+  }
+  const int maximumDay = daysInMonth(pendingDateTime_.tm_year + 1900,
+                                     pendingDateTime_.tm_mon + 1);
+  if (pendingDateTime_.tm_mday < 1) pendingDateTime_.tm_mday = maximumDay;
+  if (pendingDateTime_.tm_mday > maximumDay) pendingDateTime_.tm_mday = 1;
+}
+
+void DesktopShell::updateScreenSaver() {
+  if (screenSaverVisible_) {
+    if (fullscreenApplicationActive_ || calibration_.active()) {
+      hideScreenSaver();
+      return;
+    }
+    updateScreenSaverClock();
+    return;
+  }
+  if (!screenSaverEnabled_ || fullscreenApplicationActive_ ||
+      calibration_.active())
+    return;
+  if (lv_display_get_inactive_time(nullptr) >=
+      SCREEN_SAVER_TIMEOUTS[screenSaverTimeoutIndex_])
+    showScreenSaver();
+}
+
+void DesktopShell::showScreenSaver() {
+  if (screenSaverVisible_ || fullscreenApplicationActive_ ||
+      calibration_.active())
+    return;
+  screenSaverOverlay_ = lv_obj_create(screen_);
+  lv_obj_set_pos(screenSaverOverlay_, 0, 0);
+  lv_obj_set_size(screenSaverOverlay_, board::SCREEN_WIDTH,
+                  board::SCREEN_HEIGHT);
+  configurePanel(screenSaverOverlay_, 0x07131D);
+  lv_obj_set_style_bg_grad_color(screenSaverOverlay_, lv_color_hex(0x13293D),
+                                 0);
+  lv_obj_set_style_bg_grad_dir(screenSaverOverlay_, LV_GRAD_DIR_VER, 0);
+  lv_obj_add_flag(screenSaverOverlay_, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(screenSaverOverlay_, screenSaverWakeEvent,
+                      LV_EVENT_PRESSED, nullptr);
+
+  screenSaverImageLvPath_[0] = '\0';
+  if (screenSaverImagePath_[0] && storage_.mounted() &&
+      storage_.exists(screenSaverImagePath_) &&
+      StorageService::makeLvglPath(screenSaverImagePath_,
+                                   screenSaverImageLvPath_,
+                                   sizeof(screenSaverImageLvPath_))) {
+    lv_image_header_t header;
+    if (lv_image_decoder_get_info(screenSaverImageLvPath_, &header) ==
+        LV_RESULT_OK) {
+      lv_obj_t* image = lv_image_create(screenSaverOverlay_);
+      lv_obj_set_pos(image, 0, 0);
+      lv_obj_set_size(image, board::SCREEN_WIDTH, board::SCREEN_HEIGHT);
+      lv_image_set_inner_align(image, LV_IMAGE_ALIGN_CENTER);
+      lv_image_set_src(image, screenSaverImageLvPath_);
+      lv_obj_remove_flag(image, LV_OBJ_FLAG_CLICKABLE);
+    } else {
+      screenSaverImageLvPath_[0] = '\0';
+    }
+  }
+
+  lv_obj_t* clockPanel = lv_obj_create(screenSaverOverlay_);
+  lv_obj_set_pos(clockPanel, 55, 69);
+  lv_obj_set_size(clockPanel, 210, 102);
+  configurePanel(clockPanel, 0x05090D, 10);
+  lv_obj_remove_flag(clockPanel, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_bg_opa(clockPanel, LV_OPA_70, 0);
+  lv_obj_set_style_border_width(clockPanel, 1, 0);
+  lv_obj_set_style_border_color(clockPanel, lv_color_hex(0xB7D7EA), 0);
+  lv_obj_set_style_border_opa(clockPanel, LV_OPA_50, 0);
+
+  screenSaverTimeLabel_ = lv_label_create(clockPanel);
+  lv_obj_set_style_text_font(screenSaverTimeLabel_, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_color(screenSaverTimeLabel_, lv_color_white(), 0);
+  lv_obj_set_width(screenSaverTimeLabel_, 210);
+  lv_obj_set_pos(screenSaverTimeLabel_, 0, 15);
+  lv_obj_set_style_text_align(screenSaverTimeLabel_, LV_TEXT_ALIGN_CENTER, 0);
+  screenSaverDateLabel_ = lv_label_create(clockPanel);
+  lv_obj_set_style_text_color(screenSaverDateLabel_, lv_color_hex(0xD6E9F5),
+                              0);
+  lv_obj_set_width(screenSaverDateLabel_, 210);
+  lv_obj_set_pos(screenSaverDateLabel_, 0, 59);
+  lv_obj_set_style_text_align(screenSaverDateLabel_, LV_TEXT_ALIGN_CENTER, 0);
+  updateScreenSaverClock();
+  lv_obj_move_foreground(screenSaverOverlay_);
+  screenSaverVisible_ = true;
+}
+
+void DesktopShell::hideScreenSaver() {
+  if (!screenSaverOverlay_) return;
+  lv_obj_delete(screenSaverOverlay_);
+  screenSaverOverlay_ = nullptr;
+  screenSaverTimeLabel_ = nullptr;
+  screenSaverDateLabel_ = nullptr;
+  screenSaverVisible_ = false;
+  if (screenSaverImageLvPath_[0]) {
+    lv_image_cache_drop(screenSaverImageLvPath_);
+    screenSaverImageLvPath_[0] = '\0';
+  }
+  lv_display_trigger_activity(nullptr);
+}
+
+void DesktopShell::updateScreenSaverClock() {
+  if (!screenSaverTimeLabel_ || !screenSaverDateLabel_) return;
+  char time[12];
+  char date[20];
+  dateTime_.formatTime(time, sizeof(time));
+  dateTime_.formatDate(date, sizeof(date));
+  lv_label_set_text(screenSaverTimeLabel_, time);
+  lv_label_set_text(screenSaverDateLabel_, date);
 }
 
 void DesktopShell::parentDirectory() {
@@ -990,7 +1559,21 @@ void DesktopShell::settingsTouchEvent(lv_event_t*) {
   active_->openTouchSettings();
 }
 
-void DesktopShell::settingsBackEvent(lv_event_t*) { active_->openSettings(); }
+void DesktopShell::settingsDateTimeEvent(lv_event_t*) {
+  active_->dateTimeScrollY_ = 0;
+  active_->prepareDateTimeEdit();
+  active_->openDateTimeSettings();
+}
+
+void DesktopShell::settingsScreenSaverEvent(lv_event_t*) {
+  active_->openScreenSaverSettings();
+}
+
+void DesktopShell::settingsBackEvent(lv_event_t*) {
+  active_->dateTimeEditPrepared_ = false;
+  active_->dateTimeScrollY_ = 0;
+  active_->openSettings();
+}
 
 void DesktopShell::languageEnglishEvent(lv_event_t*) {
   if (active_->language_ == SystemLanguage::English) return;
@@ -1108,4 +1691,125 @@ void DesktopShell::clearWallpaperEvent(lv_event_t*) {
   active_->removeWallpaper();
   active_->wallpaperService_.clearOptimizedFile();
   active_->setTaskText(active_->tr("Wallpaper cleared", "Обои удалены"));
+}
+
+void DesktopShell::setScreenSaverImageEvent(lv_event_t*) {
+  if (!active_->settings_.saveScreenSaverImage(active_->selectedImagePath_)) {
+    active_->showInfoDialog(active_->tr(
+        "Could not save the screen saver image.",
+        "Не удалось сохранить картинку заставки."));
+    return;
+  }
+  strlcpy(active_->screenSaverImagePath_, active_->selectedImagePath_,
+          sizeof(active_->screenSaverImagePath_));
+  active_->setTaskText(active_->tr("Screen saver image saved",
+                                   "Картинка заставки сохранена"));
+}
+
+void DesktopShell::dateTimeAdjustEvent(lv_event_t* event) {
+  if (active_->dateTimeContent_)
+    active_->dateTimeScrollY_ =
+        lv_obj_get_scroll_y(active_->dateTimeContent_);
+  const uintptr_t encoded =
+      reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
+  active_->adjustPendingDateTime(static_cast<uint8_t>(encoded / 2),
+                                 encoded % 2 ? 1 : -1);
+  active_->openDateTimeSettings();
+}
+
+void DesktopShell::dateTimeSaveEvent(lv_event_t*) {
+  if (!active_->dateTime_.setLocal(active_->pendingDateTime_,
+                                   active_->pendingTimezoneMinutes_)) {
+    active_->showInfoDialog(active_->tr("Could not save date and time.",
+                                        "Не удалось сохранить дату и время."));
+    return;
+  }
+  active_->dateTimeEditPrepared_ = false;
+  active_->dateTimeScrollY_ = 0;
+  active_->lastClockSecond_ = UINT32_MAX;
+  active_->updateClock();
+  active_->setTaskText(active_->tr("Date and time saved",
+                                   "Дата и время сохранены"));
+  active_->openSettings();
+}
+
+void DesktopShell::screenSaverEnabledEvent(lv_event_t*) {
+  const bool enabled = !active_->screenSaverEnabled_;
+  if (!active_->settings_.saveScreenSaverEnabled(enabled)) return;
+  active_->screenSaverEnabled_ = enabled;
+  if (!enabled) active_->hideScreenSaver();
+  lv_display_trigger_activity(nullptr);
+  active_->openScreenSaverSettings();
+}
+
+void DesktopShell::screenSaverTimeoutEvent(lv_event_t*) {
+  active_->screenSaverTimeoutIndex_ =
+      (active_->screenSaverTimeoutIndex_ + 1) % SCREEN_SAVER_TIMEOUT_COUNT;
+  if (!active_->settings_.saveScreenSaverTimeout(
+          active_->screenSaverTimeoutIndex_))
+    return;
+  lv_display_trigger_activity(nullptr);
+  active_->openScreenSaverSettings();
+}
+
+void DesktopShell::screenSaverChooseImageEvent(lv_event_t*) {
+  strlcpy(active_->currentPath_, "/", sizeof(active_->currentPath_));
+  active_->filePage_ = 0;
+  active_->openFiles();
+}
+
+void DesktopShell::screenSaverClearImageEvent(lv_event_t*) {
+  if (!active_->settings_.clearScreenSaverImage()) return;
+  active_->screenSaverImagePath_[0] = '\0';
+  active_->openScreenSaverSettings();
+}
+
+void DesktopShell::screenSaverWakeEvent(lv_event_t*) {
+  active_->hideScreenSaver();
+}
+
+void DesktopShell::noteCardEvent(lv_event_t* event) {
+  const uint8_t index = static_cast<uint8_t>(
+      reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  if (index == NOTE_CREATE_INDEX) {
+    active_->openNoteEditor();
+    return;
+  }
+  if (index < active_->noteCount_)
+    active_->openNoteEditor(active_->noteSummaries_[index].path);
+}
+
+void DesktopShell::noteTextChangedEvent(lv_event_t*) {
+  if (active_->noteEditorOpen_) active_->noteDirty_ = true;
+}
+
+void DesktopShell::noteTextFocusedEvent(lv_event_t* event) {
+  active_->showNoteKeyboard(lv_event_get_target_obj(event));
+}
+
+void DesktopShell::noteTitleReadyEvent(lv_event_t*) {
+  if (!active_->noteBodyArea_) return;
+  active_->showNoteKeyboard(active_->noteBodyArea_);
+  lv_obj_add_state(active_->noteBodyArea_, LV_STATE_FOCUSED);
+  lv_textarea_set_cursor_pos(active_->noteBodyArea_, 0);
+}
+
+void DesktopShell::noteBackEvent(lv_event_t*) { active_->requestNoteExit(); }
+
+void DesktopShell::noteSaveEvent(lv_event_t*) { active_->saveCurrentNote(); }
+
+void DesktopShell::noteHideKeyboardEvent(lv_event_t*) {
+  active_->hideNoteKeyboard();
+}
+
+void DesktopShell::noteExitSaveEvent(lv_event_t*) {
+  if (!active_->saveCurrentNote()) return;
+  active_->closeWindow();
+  active_->openNotes();
+}
+
+void DesktopShell::noteExitDiscardEvent(lv_event_t*) {
+  active_->noteDirty_ = false;
+  active_->closeWindow();
+  active_->openNotes();
 }

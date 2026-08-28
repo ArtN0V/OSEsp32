@@ -5,7 +5,9 @@
 
 #include "../kernel/SystemKernel.h"
 #include "../services/BootModeService.h"
+#include "../services/DateTimeService.h"
 #include "../services/LocalizationService.h"
+#include "../services/NotesService.h"
 #include "../services/SystemSettingsService.h"
 #include "../services/StorageService.h"
 #include "../services/TouchCalibrationService.h"
@@ -17,7 +19,7 @@ enum class ShellAppId : uint8_t {
   Files,
   Settings,
   SystemInfo,
-  TextInput,
+  Notes,
   About,
 };
 
@@ -25,6 +27,7 @@ class DesktopShell {
  public:
   bool begin(SystemKernel& kernel, BootModeService& bootMode);
   void update();
+  void setFullscreenApplicationActive(bool active);
 
  private:
   static DesktopShell* active_;
@@ -33,7 +36,9 @@ class DesktopShell {
   BootModeService* bootMode_ = nullptr;
   SystemSettingsService settings_;
   LocalizationService localization_;
+  DateTimeService dateTime_;
   StorageService storage_;
+  NotesService notes_;
   WallpaperService wallpaperService_;
   LvglPort port_;
   TouchCalibrationService calibration_;
@@ -49,10 +54,25 @@ class DesktopShell {
   lv_obj_t* calibrationTitle_ = nullptr;
   lv_obj_t* calibrationTarget_ = nullptr;
   lv_obj_t* calibrationProgress_ = nullptr;
+  lv_obj_t* noteTitleArea_ = nullptr;
+  lv_obj_t* noteBodyArea_ = nullptr;
+  lv_obj_t* noteKeyboard_ = nullptr;
+  lv_obj_t* noteHideKeyboardButton_ = nullptr;
+  lv_obj_t* dateTimeContent_ = nullptr;
+  lv_obj_t* screenSaverOverlay_ = nullptr;
+  lv_obj_t* screenSaverTimeLabel_ = nullptr;
+  lv_obj_t* screenSaverDateLabel_ = nullptr;
   bool calibrationPreviousPressed_ = false;
   bool rotation180_ = false;
   SystemLanguage language_ = SystemLanguage::English;
   uint8_t desktopColor_ = 0;
+  bool noteEditorOpen_ = false;
+  bool noteDirty_ = false;
+  bool noteKeyboardVisible_ = false;
+  bool screenSaverEnabled_ = false;
+  bool screenSaverVisible_ = false;
+  bool fullscreenApplicationActive_ = false;
+  uint8_t screenSaverTimeoutIndex_ = 2;
   bool previousStorageMounted_ = false;
   StorageEntry fileEntries_[StorageService::PAGE_ENTRIES];
   uint8_t fileEntryCount_ = 0;
@@ -63,6 +83,17 @@ class DesktopShell {
   char selectedImageLvPath_[132] = {};
   char wallpaperPath_[129] = {};
   char wallpaperLvPath_[132] = {};
+  NoteSummary noteSummaries_[NotesService::MAX_NOTES];
+  uint8_t noteCount_ = 0;
+  char notePath_[129] = {};
+  char noteTitle_[NotesService::TITLE_CAPACITY] = {};
+  char noteBody_[NotesService::BODY_CAPACITY] = {};
+  char screenSaverImagePath_[129] = {};
+  char screenSaverImageLvPath_[132] = {};
+  struct tm pendingDateTime_ = {};
+  int16_t pendingTimezoneMinutes_ = 180;
+  bool dateTimeEditPrepared_ = false;
+  int32_t dateTimeScrollY_ = 0;
   uint32_t lastClockSecond_ = UINT32_MAX;
 
   void buildDesktop();
@@ -79,6 +110,7 @@ class DesktopShell {
                               int16_t y, lv_event_cb_t callback);
   lv_obj_t* createColorChoice(lv_obj_t* parent, uint8_t colorIndex,
                               int16_t x, int16_t y);
+  void configureKeyboard(lv_obj_t* keyboard);
   lv_obj_t* createWindow(const char* title);
   void closeWindow();
   void closeDialog();
@@ -92,8 +124,11 @@ class DesktopShell {
   void openDesktopColorSettings();
   void openLanguageSettings();
   void openTouchSettings();
+  void openDateTimeSettings();
+  void openScreenSaverSettings();
   void openSystemInfo();
-  void openTextInput();
+  void openNotes();
+  void openNoteEditor(const char* path = nullptr);
   void openAbout();
   void updateClock();
   void setTaskText(const char* text);
@@ -101,6 +136,17 @@ class DesktopShell {
   void removeWallpaper();
   void applyDesktopColor();
   void parentDirectory();
+  void prepareDateTimeEdit();
+  void adjustPendingDateTime(uint8_t field, int8_t delta);
+  void updateScreenSaver();
+  void showScreenSaver();
+  void hideScreenSaver();
+  void updateScreenSaverClock();
+  void showNoteKeyboard(lv_obj_t* textarea);
+  void hideNoteKeyboard();
+  bool saveCurrentNote();
+  void requestNoteExit();
+  void showNoteExitDialog();
   const char* tr(const char* english, const char* russian) const {
     return localization_.text(english, russian);
   }
@@ -128,6 +174,8 @@ class DesktopShell {
   static void settingsDisplayEvent(lv_event_t* event);
   static void settingsLanguageEvent(lv_event_t* event);
   static void settingsTouchEvent(lv_event_t* event);
+  static void settingsDateTimeEvent(lv_event_t* event);
+  static void settingsScreenSaverEvent(lv_event_t* event);
   static void settingsBackEvent(lv_event_t* event);
   static void languageEnglishEvent(lv_event_t* event);
   static void languageRussianEvent(lv_event_t* event);
@@ -143,4 +191,21 @@ class DesktopShell {
   static void imageBackEvent(lv_event_t* event);
   static void setWallpaperEvent(lv_event_t* event);
   static void clearWallpaperEvent(lv_event_t* event);
+  static void setScreenSaverImageEvent(lv_event_t* event);
+  static void dateTimeAdjustEvent(lv_event_t* event);
+  static void dateTimeSaveEvent(lv_event_t* event);
+  static void screenSaverEnabledEvent(lv_event_t* event);
+  static void screenSaverTimeoutEvent(lv_event_t* event);
+  static void screenSaverChooseImageEvent(lv_event_t* event);
+  static void screenSaverClearImageEvent(lv_event_t* event);
+  static void screenSaverWakeEvent(lv_event_t* event);
+  static void noteCardEvent(lv_event_t* event);
+  static void noteTextChangedEvent(lv_event_t* event);
+  static void noteTextFocusedEvent(lv_event_t* event);
+  static void noteTitleReadyEvent(lv_event_t* event);
+  static void noteBackEvent(lv_event_t* event);
+  static void noteSaveEvent(lv_event_t* event);
+  static void noteHideKeyboardEvent(lv_event_t* event);
+  static void noteExitSaveEvent(lv_event_t* event);
+  static void noteExitDiscardEvent(lv_event_t* event);
 };

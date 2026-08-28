@@ -1,5 +1,6 @@
 #include "StorageService.h"
 
+#include <algorithm>
 #include <strings.h>
 
 #include "../board/BoardConfig.h"
@@ -39,7 +40,7 @@ bool StorageService::mount() {
 void StorageService::ensureSystemDirectories() {
   static constexpr const char* directories[] = {
       "/OSEsp32", "/OSEsp32/Apps", "/OSEsp32/Data",
-      "/OSEsp32/Wallpapers"};
+      "/OSEsp32/Wallpapers", "/OSEsp32/Notes"};
   for (const char* directory : directories) {
     if (!SD.exists(directory) && !SD.mkdir(directory)) {
       logger_->warning("storage", "could not create %s", directory);
@@ -122,6 +123,67 @@ bool StorageService::renamePath(const char* from, const char* to) {
   if (!mounted_ || !from || !to || !SD.exists(from)) return false;
   if (SD.exists(to) && !SD.remove(to)) return false;
   return SD.rename(from, to);
+}
+
+bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
+                              size_t& length, bool allowTruncate) {
+  length = 0;
+  if (!mounted_ || !path || !buffer || capacity < 2) return false;
+  File file = SD.open(path, FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    return false;
+  }
+  const size_t fileSize = static_cast<size_t>(file.size());
+  if (!allowTruncate && fileSize >= capacity) {
+    file.close();
+    return false;
+  }
+  const size_t wanted = std::min(fileSize, capacity - 1);
+  length = file.readBytes(buffer, wanted);
+  file.close();
+  buffer[length] = '\0';
+  return length == wanted;
+}
+
+bool StorageService::writeFileAtomic(const char* path, const uint8_t* data,
+                                     size_t length) {
+  if (!mounted_ || !path || !data || !path[0]) return false;
+  char temporary[145];
+  char backup[145];
+  if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >=
+          static_cast<int>(sizeof(temporary)) ||
+      snprintf(backup, sizeof(backup), "%s.bak", path) >=
+          static_cast<int>(sizeof(backup)))
+    return false;
+
+  if (SD.exists(temporary)) SD.remove(temporary);
+  File file = SD.open(temporary, FILE_WRITE);
+  if (!file) return false;
+  const size_t written = file.write(data, length);
+  file.flush();
+  file.close();
+  if (written != length) {
+    SD.remove(temporary);
+    return false;
+  }
+
+  if (SD.exists(backup) && !SD.remove(backup)) {
+    SD.remove(temporary);
+    return false;
+  }
+  const bool hadOriginal = SD.exists(path);
+  if (hadOriginal && !SD.rename(path, backup)) {
+    SD.remove(temporary);
+    return false;
+  }
+  if (!SD.rename(temporary, path)) {
+    if (hadOriginal) SD.rename(backup, path);
+    SD.remove(temporary);
+    return false;
+  }
+  if (hadOriginal) SD.remove(backup);
+  return true;
 }
 
 bool StorageService::isImagePath(const char* path) {

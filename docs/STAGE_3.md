@@ -51,6 +51,9 @@ and adds persistent desktop personalization.
      keyboard inside the window content area.
    - Reduce key padding and use the 12-pixel font so every keyboard row remains
      visible and touchable.
+   - Give English and Russian the same four-row structure, control-key colors
+     and key proportions. Russian includes `ё`, `ъ`, Space, Enter, arrows,
+     hide, mode and OK keys.
 
 7. **Settings and localization**
    - Replace the flat group of setting buttons with a Windows-style category
@@ -64,10 +67,29 @@ and adds persistent desktop personalization.
    - Offer six persistent desktop gradients on a separate Display page; keep
      them behind wallpaper rather than deleting wallpaper when color changes.
 
+8. **Notes**
+   - Replace the Text Input demo with a scrollable three-column gallery of
+     rounded preview cards; the first card always creates a note.
+   - Store bounded title/body text as `.note` documents under
+     `/OSEsp32/Notes` and replace saved files transactionally.
+   - Provide a fullscreen editor with a bold title, word-wrapped scrollable
+     body, touch cursor placement, localized keyboard, explicit save and a
+     three-way unsaved-change dialog.
+
+9. **Date, time and screen saver**
+   - Make the main Settings list vertically scrollable and add Date & time and
+     Screen saver categories.
+   - Keep manual local time plus UTC offset behind a `DateTimeService`; reserve
+     `setUtc()` as the later NTP entry point without enabling Wi-Fi in Stage 3.
+   - Trigger the saver from LVGL inactivity, optionally stream an SD image,
+     render date/time above it, and destroy the saver tree and image cache on
+     wake. Suppress it while any fullscreen application is active.
+
 ## Acceptance checks on the board
 
-1. Open Text Input and confirm every row, including space/Enter and mode keys,
-   is fully visible and touchable.
+1. Open Notes in English and Russian and confirm every keyboard row, including
+   Space/Enter, `ё`/`ъ`, mode, arrows, hide and OK, is visible and uses the
+   same control-key colors and proportions.
 2. Boot without SD: the desktop and Settings must work; Files shows a clear
    unavailable message.
 3. Insert a FAT32 SD, wait up to three seconds, reopen Files and navigate a
@@ -90,9 +112,18 @@ and adds persistent desktop personalization.
 9. With wallpaper cleared, select every desktop color and restart on one of
    them. Confirm the selection persists. Set wallpaper, change color, then
    clear wallpaper and confirm the newly selected color appears.
+10. With an SD card inserted, create enough notes to scroll the gallery. Check
+    title ellipsis, preview clipping, word wrapping, tap-to-place cursor,
+    keyboard hide/show, explicit save and all three dirty-exit choices. Reboot
+    and reopen the notes. Remove the card while editing and confirm unsaved
+    text is not silently discarded.
+11. Set date/time and a negative UTC offset, scroll while adjusting every
+    field, and reboot. Enable the screen saver for each timeout, test both dark
+    and image backgrounds, wake it by touch, and confirm it never appears over
+    the fullscreen note editor. Repeat after removing the SD card.
 
 ## Exit criterion
 
-All nine checks pass without a crash, stuck SD mount, clipped keyboard row,
+All eleven checks pass without a crash, stuck SD mount, clipped keyboard row,
 touch inversion or persistent heap loss. The `.yap` application runtime remains
 the explicit start of Stage 4.

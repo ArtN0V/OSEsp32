@@ -12,17 +12,21 @@ available as a recovery mode.
 ## Current capabilities
 
 - Windows-inspired desktop with icon-style shortcuts, taskbar, Start menu,
-  uptime clock and foreground windows.
+  local clock and foreground windows.
 - Paged SD file manager, built-in BMP/JPEG viewer and optimized desktop
   wallpapers.
-- Windows-style Settings list for display, language and touch options,
-  including six persistent desktop color themes.
+- Windows-style scrollable Settings list for display, language, touch,
+  date/time and screen-saver options, including six persistent desktop color
+  themes.
 - English interface by default plus persistent Russian localization and a
   Cyrillic on-screen keyboard.
 - Settings for brightness, touch calibration, wallpaper reset and persistent
   0/180-degree screen rotation.
 - Compact on-screen keyboard and partial LVGL rendering without a full
   framebuffer.
+- Built-in Notes with an SD-backed card gallery, editor, word wrapping,
+  touch cursor placement, explicit save and unsaved-change protection.
+- Optional resource-releasing screen saver with date/time and an SD image.
 - First-boot and Settings-driven five-point touch calibration stored in NVS.
 - Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
   light sensor and memory/stress testing.
@@ -48,7 +52,8 @@ available as a recovery mode.
 
 The project-local `partitions.csv` defines two OTA application slots and a
 small internal SPIFFS area. On first SD mount, OSEsp32 creates `/OSEsp32/Apps`,
-`/OSEsp32/Data` and `/OSEsp32/Wallpapers` for future applications and content.
+`/OSEsp32/Data`, `/OSEsp32/Notes` and `/OSEsp32/Wallpapers` for applications
+and user content.
 
 `platformio.ini` and the guarded `src/main.cpp` exist only for repeatable
 command-line/CI build checks. They do not change the Arduino IDE workflow and
@@ -136,6 +141,32 @@ Teal, Plum, Slate or Forest. The selected gradient is saved immediately and is
 visible whenever wallpaper is disabled. Changing color does not delete the
 current wallpaper; use **Clear Wallpaper** to reveal it.
 
+### Notes
+
+Open **Notes** from the desktop or Start menu. The first card creates a note;
+saved notes appear as rounded preview cards and the page scrolls when needed.
+A note has a bold title and a word-wrapped body. Tap either field to place the
+cursor and show the matching English or Russian keyboard. The toolbar can hide
+the keyboard, save, or return to the gallery; returning with unsaved changes
+offers Save, Don't Save and Cancel. Notes use atomic `.note` files under
+`/OSEsp32/Notes`, so a failed replacement does not intentionally destroy the
+previous saved version.
+
+### Date, time and screen saver
+
+**Settings → Date & time** currently sets the clock and UTC offset manually.
+`DateTimeService::setUtc()` is the future synchronization boundary, but Stage 3
+does not start Wi-Fi. The CYD has no battery-backed real-time clock: time runs
+normally while powered, but after a complete power loss it resumes from the
+last manually saved value and cannot account for the powered-off interval.
+
+**Settings → Screen saver** enables it, selects an inactivity delay and may
+use any supported SD image behind a centered clock/date panel. The image is
+decoded only when the saver opens; when it closes, its LVGL object tree and
+exact image cache entry are discarded. The saver is suppressed in fullscreen
+applications such as the note editor. Remove the SD card to fall back safely
+to the dark clock background.
+
 ## Dependencies
 
 Required now:
@@ -146,9 +177,10 @@ Required now:
 - Built-in `SPI`, `FS` and `SD` libraries from Arduino-ESP32
 - Built-in `Preferences` for calibration and one-shot boot settings
 
-The generated Cyrillic glyph data in `src/ui/OSEsp32Font12.c` and
-`src/ui/OSEsp32Font14.c` is derived from Noto Sans, distributed under the
-Apache License 2.0. See [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
+The generated Cyrillic glyph data in `src/ui/OSEsp32Font12.c`,
+`src/ui/OSEsp32Font14.c` and `src/ui/OSEsp32Font16Bold.c` is derived from Noto
+Sans, distributed under the Apache License 2.0. See
+[docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
 Planned for later stages:
 
@@ -178,6 +210,7 @@ docs/ROADMAP.md           development stages
 docs/STAGE_1.md           platform-foundation plan and acceptance checks
 docs/STAGE_2.md           graphical-shell plan and acceptance checks
 docs/STAGE_3.md           storage and personalization plan and checks
+docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 ```
 
 ## Safety
