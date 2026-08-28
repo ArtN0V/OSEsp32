@@ -18,10 +18,11 @@ gate, not a feature-expansion stage.
 
 Exit: all seven physical keyboard checks pass.
 
-Current status: the reusable button-matrix service, LVGL textarea adapter and
-isolated **System Info → Keyboard Test** are implemented and compile. Physical
-visibility, touch and repetition checks remain open. Notes deliberately still
-uses its previous keyboard until the isolated test passes.
+Current status: the reusable button-matrix service and isolated **System Info →
+Keyboard Test** passed their initial on-board visibility/input check. Notes now
+uses the same service through its own textarea adapter; its old keyboard object,
+maps and callbacks are removed. Repetition, close, rotation and memory checks
+remain open.
 
 ### 2. Storage hardening
 

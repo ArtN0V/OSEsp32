@@ -58,6 +58,7 @@ class DesktopShell {
   TouchCalibrationService calibration_;
   SystemKeyboard systemKeyboard_;
   LvglTextareaInputClient keyboardTestClient_;
+  LvglTextareaInputClient noteKeyboardClient_;
 
   lv_obj_t* screen_ = nullptr;
   lv_obj_t* taskLabel_ = nullptr;
@@ -72,7 +73,6 @@ class DesktopShell {
   lv_obj_t* calibrationProgress_ = nullptr;
   lv_obj_t* noteTitleArea_ = nullptr;
   lv_obj_t* noteBodyArea_ = nullptr;
-  lv_obj_t* noteKeyboard_ = nullptr;
   lv_obj_t* noteHideKeyboardButton_ = nullptr;
   lv_obj_t* dateTimeContent_ = nullptr;
   lv_obj_t* keyboardTestArea_ = nullptr;
@@ -134,7 +134,6 @@ class DesktopShell {
                               int16_t y, lv_event_cb_t callback);
   lv_obj_t* createColorChoice(lv_obj_t* parent, uint8_t colorIndex,
                               int16_t x, int16_t y);
-  void configureKeyboard(lv_obj_t* keyboard);
   lv_obj_t* createWindow(const char* title);
   void closeWindow();
   void closeDialog();
@@ -243,6 +242,9 @@ class DesktopShell {
   static void noteTextChangedEvent(lv_event_t* event);
   static void noteTextFocusedEvent(lv_event_t* event);
   static void noteTitleReadyEvent(lv_event_t* event);
+  static void noteKeyboardVisibilityChanged(bool visible,
+                                             uint16_t coveredHeight,
+                                             void* userData);
   static void noteBackEvent(lv_event_t* event);
   static void noteSaveEvent(lv_event_t* event);
   static void noteHideKeyboardEvent(lv_event_t* event);

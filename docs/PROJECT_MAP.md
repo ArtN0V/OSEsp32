@@ -9,10 +9,9 @@ called out explicitly and must not be mistaken for implemented code.
 - Primary tool: Arduino IDE; `OSEsp32.ino` is the entry point.
 - Reproducible check: PlatformIO environment `cyd_stage3` with LVGL 9.5.0.
 - Current roadmap stage: **3.1 stabilization and system UI extraction**.
-- Known hardware blocker: the Notes text fields receive focus, but the current
-  embedded `lv_keyboard` matrix is not visible on the board. Do not mark the
-  keyboard acceptance check as passed until the new system keyboard passes the
-  physical checklist in `SYSTEM_KEYBOARD.md`.
+- The custom system keyboard passed its initial on-board visibility and input
+  check and now serves Notes through an adapter. Repetition, close, rotation and
+  memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
 
 ## Boot and update flow
 
@@ -54,7 +53,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |
-| `src/ui/SystemKeyboard.*` | One OS-owned button-matrix keyboard and application-neutral input-client adapter | Lives on `lv_layer_top()`; lazily retains its hidden object tree and supports explicit `shutdown()`. Currently exercised only by Keyboard Test. |
+| `src/ui/SystemKeyboard.*` | One OS-owned button-matrix keyboard and application-neutral input-client adapter | Lives on `lv_layer_top()`; lazily retains its hidden object tree and supports explicit `shutdown()`. Shared by Notes and Keyboard Test. |
 | `src/ui/OSEsp32Font*` | Embedded regular/bold ASCII+Cyrillic fonts | Generated assets; see `THIRD_PARTY.md`. |
 | `src/shell/DesktopShell.*` | Desktop plus every built-in graphical application | Current monolith and main refactoring target. |
 | `src/diagnostics/DiagnosticsApp.*` | Recovery test UI and Serial commands | Intentionally synchronous and English-only. |
@@ -62,10 +61,10 @@ Arduino global `SD` implementation without concurrent access.
 ## Current graphical object ownership
 
 `DesktopShell` owns the active screen, desktop, one foreground window, dialogs,
-calibration overlay, Notes editor, screen saver, the legacy Notes keyboard and
-the first `SystemKeyboard` instance. The system keyboard alone owns its overlay
-object tree; `DesktopShell` currently acts as its composition root and hosts the
-isolated test client. LVGL callbacks route through the static
+calibration overlay, Notes editor, screen saver and the first `SystemKeyboard`
+instance. The system keyboard alone owns its overlay object tree;
+`DesktopShell` currently acts as its composition root and hosts separate Notes
+and test input adapters. LVGL callbacks route through the static
 `DesktopShell::active_` pointer. This works for a single shell instance but is
 not the final composition boundary for reusable system UI.
 

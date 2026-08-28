@@ -1,12 +1,13 @@
 # System keyboard architecture
 
-## Why the current approach is rejected
+## Why the previous approach was rejected
 
-The Notes implementation creates and controls an `lv_keyboard` directly. The
-focus event is confirmed because the toolbar's hide-keyboard button changes
-state, and source inspection confirms non-zero geometry and valid English and
-Russian maps. Explicit opacity, foreground ordering and moving the keyboard to
-the screen root did not make the matrix visible on the target board.
+The previous Notes implementation created and controlled an `lv_keyboard`
+directly. Its focus event was confirmed because the toolbar's hide-keyboard
+button changed state, and source inspection confirmed non-zero geometry and
+valid English and Russian maps. Explicit opacity, foreground ordering and
+moving the keyboard to the screen root did not make the matrix visible on the
+target board.
 
 This means another Notes-specific visibility patch would preserve the wrong
 ownership model even if it happened to work. The replacement must be an
@@ -116,14 +117,15 @@ a system dialog instead of presenting a hide button for an invisible keyboard.
 
 ## Implementation sequence
 
-1. **Implemented; awaiting hardware acceptance:** build `SystemKeyboard` with
-   a custom `lv_buttonmatrix` and add the isolated Keyboard Test.
-2. **Implemented; awaiting hardware acceptance:** add Russian, case switching
-   and symbols with one geometry/style definition.
-3. **Implemented; awaiting hardware acceptance:** add the LVGL textarea adapter
-   and explicit text, cursor, Enter, Backspace, Hide and Done dispatch.
-4. Make Notes request the service and remove every `noteKeyboard_` field and
-   callback from `DesktopShell`. Do this only after steps 1–3 pass on the board.
+1. **Implemented and initially verified on hardware:** build `SystemKeyboard`
+   with a custom `lv_buttonmatrix` and add the isolated Keyboard Test.
+2. **Implemented and initially verified on hardware:** add Russian, case
+   switching and symbols with one geometry/style definition.
+3. **Implemented and initially verified on hardware:** add the LVGL textarea
+   adapter and explicit text, cursor, Enter, Backspace, Hide and Done dispatch.
+4. **Implemented; integration retest required:** Notes requests the service
+   through its own adapter. All `noteKeyboard_`, `lv_keyboard` and duplicate
+   layout code has been removed from the shell.
 5. Test repeated show/hide, field switching, window close and SD removal while
    recording heap and largest-block baselines.
 6. Move construction to the graphical composition root when `DesktopShell` is

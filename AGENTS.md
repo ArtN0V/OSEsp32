@@ -28,7 +28,8 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: Stage 3.1 stabilization. Validate the isolated system keyboard
-through **System Info → Keyboard Test** on hardware. Only after it passes should
-the existing Notes keyboard be replaced as described in
-`docs/SYSTEM_KEYBOARD.md`; Stage 4 remains blocked until that migration passes.
+Current priority: Stage 3.1 stabilization. The isolated system keyboard passed
+its initial on-board visibility/input check and now serves Notes through a
+textarea adapter. Validate Notes field switching, repeated show/hide, close,
+rotation and memory stability as described in `docs/SYSTEM_KEYBOARD.md`; Stage
+4 remains blocked until those checks pass.

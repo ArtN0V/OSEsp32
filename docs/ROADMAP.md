@@ -29,8 +29,9 @@ Notes, make Settings scrollable, add a manual date/time service prepared for a
 later NTP source, and add a resource-releasing clock, picture-only and animated
 starfield screen saver that is disabled while fullscreen applications run.
 
-The feature set is present, but Stage 3 is not accepted because the Notes-owned
-keyboard matrix remains invisible on the target board.
+The feature set is present. The replacement system keyboard is visible on the
+target board and has been connected to Notes; the remaining Stage 3.1 lifecycle
+and memory checks still block final acceptance.
 
 ## Stage 3.1 — stabilization and system UI extraction (current)
 
@@ -41,9 +42,10 @@ actual code ownership, then begin extracting shared overlays from the monolithic
 `DesktopShell`. See [STAGE_3_1.md](STAGE_3_1.md) and
 [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md).
 
-Current checkpoint: the first reusable `SystemKeyboard` implementation and its
-isolated **System Info → Keyboard Test** are build-complete. Hardware acceptance
-is still required before replacing the Notes-owned keyboard.
+Current checkpoint: the reusable `SystemKeyboard` passed its initial isolated
+on-board check, and Notes now consumes it through a textarea adapter. The old
+Notes-owned widget has been removed. Repeated lifecycle, rotation and memory
+checks remain before Stage 3.1 can close.
 
 ## Stage 4 — application runtime
 

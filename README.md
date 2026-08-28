@@ -152,18 +152,18 @@ changes offers Save, Don't Save and Cancel. Notes use atomic `.note` files under
 `/OSEsp32/Notes`, so a failed replacement does not intentionally destroy the
 previous saved version.
 
-The current Notes-owned `lv_keyboard` is a known hardware blocker: focus and
-the hide-button state change, but the key matrix remains invisible on the
-target board. Stage 3.1 replaces it with the reusable system component defined
-in [docs/SYSTEM_KEYBOARD.md](docs/SYSTEM_KEYBOARD.md). Until that physical
-check passes, text entry in Notes must be treated as incomplete.
+Notes now uses the reusable system keyboard described in
+[docs/SYSTEM_KEYBOARD.md](docs/SYSTEM_KEYBOARD.md); the old Notes-owned
+`lv_keyboard` and its duplicate layouts have been removed. Enter in the title
+moves input to the body, Enter in the body inserts a line break, and hiding the
+keyboard expands the body to the bottom of the display. Tapping either field
+shows the keyboard again.
 
-The first replacement implementation can now be checked independently through
-**System Info → Keyboard Test**. It uses a custom four-row button matrix rather
-than the problematic Notes widget. Verify English and Russian text, case and
-symbol switching, Space, Enter, Backspace, cursor arrows and Show/Hide there.
-Its diagnostic lines report state, key count, geometry and heap values. This
-test does not yet change the keyboard used by Notes.
+The same component can be checked independently through **System Info →
+Keyboard Test**. Verify English and Russian text, case and symbol switching,
+Space, Enter, Backspace, cursor arrows and Show/Hide there. Its diagnostic lines
+report state, key count, geometry and heap values. The test field is explicitly
+single-line to prevent cursor-driven vertical scroll jitter.
 
 ### Date, time and screen saver
 

@@ -7,7 +7,7 @@ all project documentation.
 
 | Priority | Finding | Decision/status |
 |---|---|---|
-| P1 | Notes owns an `lv_keyboard` whose matrix remains invisible on hardware despite valid focus, maps, geometry, style and foreground tests. | A separate custom-button-matrix `SystemKeyboard` and Keyboard Test are implemented. Hardware gate and Notes migration remain open. |
+| P1 | Notes owned an `lv_keyboard` whose matrix remained invisible on hardware despite valid focus, maps, geometry, style and foreground tests. | Replaced: the custom-button-matrix `SystemKeyboard` passed its initial isolated on-board check and now serves Notes through an adapter. Lifecycle regression checks remain open. |
 | P1 | `DesktopShell` is nearly 2000 lines and owns platform services, shared overlays, window management and all built-in apps. | Do not rewrite all at once. Extract system keyboard first, then dialogs/file picker and built-in apps behind stable interfaces. |
 | P1 | Storage public methods did not consistently canonicalize paths. | Fixed in this audit: all public path operations now use the same bounded component canonicalizer. |
 | P1 | Wallpaper replacement removed the previous OWP before the new rename was known to succeed. | Fixed in this audit with backup/restore replacement. Full power-loss recovery of remnants remains Stage 4/6 work. |

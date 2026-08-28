@@ -1,8 +1,9 @@
 # Roadmap Stage 3 — storage, files and personalization
 
 Status: feature implementation is present, but the stage is **not accepted**.
-The Notes-owned keyboard matrix remains invisible on the physical board. Its
-replacement is the first work package of Stage 3.1.
+The failed Notes-owned keyboard has been replaced by the Stage 3.1 system
+keyboard. Its remaining lifecycle, rotation and memory checks are the current
+acceptance gate.
 
 ## Goal
 

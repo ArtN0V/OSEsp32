@@ -56,65 +56,6 @@ uint8_t daysInMonth(int year, int month) {
   return DAYS[month - 1];
 }
 
-const char* const RUSSIAN_KEYBOARD_LOWER[] = {
-    "1#", "й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х", "ъ",
-    LV_SYMBOL_BACKSPACE, "\n",
-    "ABC", "ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э",
-    LV_SYMBOL_NEW_LINE, "\n",
-    "ё", "я", "ч", "с", "м", "и", "т", "ь", "б", "ю", ".", ",", "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
-
-const char* const RUSSIAN_KEYBOARD_UPPER[] = {
-    "1#", "Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х", "Ъ",
-    LV_SYMBOL_BACKSPACE, "\n",
-    "abc", "Ф", "Ы", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Э",
-    LV_SYMBOL_NEW_LINE, "\n",
-    "Ё", "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", ".", ",", "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""};
-
-constexpr lv_buttonmatrix_ctrl_t keyboardControl(uint16_t flags,
-                                                  uint8_t width) {
-  return static_cast<lv_buttonmatrix_ctrl_t>(flags | width);
-}
-
-const lv_buttonmatrix_ctrl_t RUSSIAN_KEYBOARD_CONTROLS[] = {
-    // Mode, 12 letters, Backspace.
-    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 5),
-    // Shift, 11 letters, Enter.
-    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 5),
-    // Ё, 9 letters and punctuation.
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2), keyboardControl(LV_BUTTONMATRIX_CTRL_POPOVER, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 2),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 2),
-    // Hide, cursor left, visible space area, cursor right, Done.
-    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 3),
-    keyboardControl(0, 10),
-    keyboardControl(LV_BUTTONMATRIX_CTRL_CHECKED, 3),
-    keyboardControl(LV_KEYBOARD_CTRL_BUTTON_FLAGS, 4)};
-static_assert(sizeof(RUSSIAN_KEYBOARD_CONTROLS) /
-                  sizeof(RUSSIAN_KEYBOARD_CONTROLS[0]) ==
-              44,
-              "Russian keyboard map and control map must stay aligned");
-
 void configurePanel(lv_obj_t* object, uint32_t color, int radius = 0) {
   lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
   lv_obj_set_style_bg_opa(object, LV_OPA_COVER, 0);
@@ -157,6 +98,8 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
     kernel_->faults().report(FaultCode::InternalError, "keyboard",
                              "system keyboard initialization failed");
   keyboardTestClient_.setVisibilityCallback(keyboardTestVisibilityChanged,
+                                             this);
+  noteKeyboardClient_.setVisibilityCallback(noteKeyboardVisibilityChanged,
                                              this);
 
   storage_.begin(kernel_->events(), kernel_->logger());
@@ -351,33 +294,6 @@ lv_obj_t* DesktopShell::createColorChoice(lv_obj_t* parent,
   return choice;
 }
 
-void DesktopShell::configureKeyboard(lv_obj_t* keyboard) {
-  lv_obj_set_style_pad_all(keyboard, 2, 0);
-  lv_obj_set_style_pad_row(keyboard, 2, 0);
-  lv_obj_set_style_pad_column(keyboard, 2, 0);
-  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xD7DCE1), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xF8F9FA), LV_PART_ITEMS);
-  lv_obj_set_style_bg_color(keyboard, lv_color_hex(COLOR_ACCENT),
-                            LV_PART_ITEMS | LV_STATE_CHECKED);
-  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xC8E4FA),
-                            LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_text_color(keyboard, lv_color_hex(0x202020), LV_PART_ITEMS);
-  lv_obj_set_style_text_color(keyboard, lv_color_white(),
-                              LV_PART_ITEMS | LV_STATE_CHECKED);
-  lv_obj_set_style_border_width(keyboard, 1, LV_PART_ITEMS);
-  lv_obj_set_style_border_color(keyboard, lv_color_hex(0xAAB2BA),
-                                LV_PART_ITEMS);
-  lv_obj_set_style_text_font(keyboard, uiSmallFont(), LV_PART_ITEMS);
-  if (language_ == SystemLanguage::Russian) {
-    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER,
-                        RUSSIAN_KEYBOARD_LOWER, RUSSIAN_KEYBOARD_CONTROLS);
-    lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER,
-                        RUSSIAN_KEYBOARD_UPPER, RUSSIAN_KEYBOARD_CONTROLS);
-    lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
-  }
-}
-
 void DesktopShell::buildDesktop() {
   screen_ = lv_screen_active();
   configurePanel(screen_, COLOR_DESKTOP_TOP);
@@ -486,12 +402,7 @@ void DesktopShell::closeWindow() {
   closeDialog();
   systemKeyboard_.hide();
   keyboardTestClient_.setTarget(nullptr);
-  // The Notes keyboard is a screen-level system panel, not a child of the
-  // application window. Delete it explicitly before deleting the window.
-  if (noteKeyboard_) {
-    lv_obj_delete(noteKeyboard_);
-    noteKeyboard_ = nullptr;
-  }
+  noteKeyboardClient_.setTarget(nullptr);
   if (window_) {
     lv_obj_delete(window_);
     window_ = nullptr;
@@ -954,7 +865,9 @@ void DesktopShell::openKeyboardTest() {
   keyboardTestArea_ = lv_textarea_create(content);
   lv_obj_set_pos(keyboardTestArea_, 4, 2);
   lv_obj_set_size(keyboardTestArea_, 298, 31);
-  lv_textarea_set_one_line(keyboardTestArea_, false);
+  // This control has room for one line. Multi-line mode caused LVGL to make
+  // small alternating vertical scroll corrections while the cursor blinked.
+  lv_textarea_set_one_line(keyboardTestArea_, true);
   lv_textarea_set_max_length(keyboardTestArea_, 160);
   lv_textarea_set_placeholder_text(
       keyboardTestArea_, tr("Type here...", "Введите текст..."));
@@ -1169,18 +1082,6 @@ void DesktopShell::openNoteEditor(const char* path) {
   lv_obj_set_style_pad_left(noteBodyArea_, 7, 0);
   lv_obj_set_style_pad_right(noteBodyArea_, 7, 0);
 
-  // Keep the keyboard outside the editor's object tree. As a screen-level
-  // system panel it cannot be clipped or covered by the expanding text area.
-  noteKeyboard_ = lv_keyboard_create(screen_);
-  lv_obj_set_pos(noteKeyboard_, 0, 128);
-  lv_obj_set_size(noteKeyboard_, board::SCREEN_WIDTH, 112);
-  lv_obj_add_flag(noteKeyboard_, LV_OBJ_FLAG_FLOATING);
-  configureKeyboard(noteKeyboard_);
-  lv_obj_add_event_cb(noteKeyboard_, noteHideKeyboardEvent, LV_EVENT_CANCEL,
-                      nullptr);
-  lv_keyboard_set_textarea(noteKeyboard_, noteTitleArea_);
-  lv_obj_move_foreground(noteKeyboard_);
-
   lv_obj_add_event_cb(noteTitleArea_, noteTextChangedEvent,
                       LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_event_cb(noteBodyArea_, noteTextChangedEvent,
@@ -1194,9 +1095,10 @@ void DesktopShell::openNoteEditor(const char* path) {
 
   noteEditorOpen_ = true;
   noteDirty_ = false;
-  noteKeyboardVisible_ = true;
+  noteKeyboardVisible_ = false;
   fullscreenApplicationActive_ = true;
   setTaskText(tr("Notes", "Заметки"));
+  noteKeyboardVisibilityChanged(false, 0, this);
   if (!path) {
     lv_obj_add_state(noteTitleArea_, LV_STATE_FOCUSED);
     lv_textarea_set_cursor_pos(noteTitleArea_, LV_TEXTAREA_CURSOR_LAST);
@@ -1284,29 +1186,27 @@ void DesktopShell::applyDesktopColor() {
 }
 
 void DesktopShell::showNoteKeyboard(lv_obj_t* textarea) {
-  if (!noteEditorOpen_ || !noteKeyboard_ || !textarea) return;
-  lv_obj_set_pos(noteKeyboard_, 0, 128);
-  lv_obj_set_size(noteKeyboard_, board::SCREEN_WIDTH, 112);
-  lv_obj_remove_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_remove_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_set_height(noteBodyArea_, 56);
-  lv_obj_move_foreground(noteKeyboard_);
-  lv_keyboard_set_textarea(noteKeyboard_, textarea);
-  lv_obj_update_layout(noteKeyboard_);
-  lv_obj_invalidate(noteKeyboard_);
-  noteKeyboardVisible_ = true;
+  if (!noteEditorOpen_ || !textarea || !lv_obj_is_valid(textarea)) return;
+  noteKeyboardClient_.setTarget(textarea);
+  const KeyboardLanguage language = language_ == SystemLanguage::Russian
+                                        ? KeyboardLanguage::Russian
+                                        : KeyboardLanguage::English;
+  if (systemKeyboard_.visible()) {
+    noteKeyboardVisibilityChanged(true, SystemKeyboard::HEIGHT, this);
+  } else if (!systemKeyboard_.show(noteKeyboardClient_, language)) {
+    noteKeyboardClient_.setTarget(nullptr);
+    kernel_->faults().report(FaultCode::InternalError, "keyboard",
+                             "Notes could not show system keyboard");
+    showInfoDialog(tr("System keyboard could not be displayed.",
+                      "Не удалось показать системную клавиатуру."));
+    return;
+  }
+  lv_obj_add_state(textarea, LV_STATE_FOCUSED);
 }
 
 void DesktopShell::hideNoteKeyboard() {
-  if (!noteKeyboard_) return;
-  lv_keyboard_set_textarea(noteKeyboard_, nullptr);
-  if (noteTitleArea_) lv_obj_remove_state(noteTitleArea_, LV_STATE_FOCUSED);
-  if (noteBodyArea_) lv_obj_remove_state(noteBodyArea_, LV_STATE_FOCUSED);
-  lv_obj_add_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
-  if (noteHideKeyboardButton_)
-    lv_obj_add_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
-  if (noteBodyArea_) lv_obj_set_height(noteBodyArea_, 166);
-  noteKeyboardVisible_ = false;
+  systemKeyboard_.hide();
+  noteKeyboardClient_.setTarget(nullptr);
 }
 
 bool DesktopShell::saveCurrentNote() {
@@ -2086,6 +1986,29 @@ void DesktopShell::noteTitleReadyEvent(lv_event_t*) {
   active_->showNoteKeyboard(active_->noteBodyArea_);
   lv_obj_add_state(active_->noteBodyArea_, LV_STATE_FOCUSED);
   lv_textarea_set_cursor_pos(active_->noteBodyArea_, 0);
+}
+
+void DesktopShell::noteKeyboardVisibilityChanged(bool visible,
+                                                  uint16_t coveredHeight,
+                                                  void* userData) {
+  DesktopShell* shell = static_cast<DesktopShell*>(userData);
+  if (!shell || !shell->noteEditorOpen_) return;
+  shell->noteKeyboardVisible_ = visible;
+  if (shell->noteHideKeyboardButton_) {
+    if (visible)
+      lv_obj_remove_flag(shell->noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
+    else
+      lv_obj_add_flag(shell->noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (shell->noteBodyArea_)
+    lv_obj_set_height(shell->noteBodyArea_, visible && coveredHeight ? 56 : 166);
+  if (!visible) {
+    shell->noteKeyboardClient_.setTarget(nullptr);
+    if (shell->noteTitleArea_)
+      lv_obj_remove_state(shell->noteTitleArea_, LV_STATE_FOCUSED);
+    if (shell->noteBodyArea_)
+      lv_obj_remove_state(shell->noteBodyArea_, LV_STATE_FOCUSED);
+  }
 }
 
 void DesktopShell::noteBackEvent(lv_event_t*) { active_->requestNoteExit(); }
