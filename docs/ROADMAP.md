@@ -26,8 +26,8 @@ BMP/JPEG viewing, preprocessed strip-cached desktop wallpaper, persistent
 English/Russian localization. Keep PNG and image scaling out of the first
 version because this board has no PSRAM. Replace Text Input with SD-backed
 Notes, make Settings scrollable, add a manual date/time service prepared for a
-later NTP source, and add a resource-releasing clock/image screen saver that is
-disabled while fullscreen applications run.
+later NTP source, and add a resource-releasing clock, picture-only and animated
+starfield screen saver that is disabled while fullscreen applications run.
 
 ## Stage 4 — application runtime
 

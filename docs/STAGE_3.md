@@ -81,9 +81,12 @@ and adds persistent desktop personalization.
      Screen saver categories.
    - Keep manual local time plus UTC offset behind a `DateTimeService`; reserve
      `setUtc()` as the later NTP entry point without enabling Wi-Fi in Stage 3.
-   - Trigger the saver from LVGL inactivity, optionally stream an SD image,
-     render date/time above it, and destroy the saver tree and image cache on
-     wake. Suppress it while any fullscreen application is active.
+   - Trigger the saver from LVGL inactivity and provide persistent arrow-based
+     selection between clock, picture-only and Windows-style starfield modes.
+     Draw the animated stars in one custom layer with fixed state rather than
+     allocating a widget per star.
+   - Destroy the saver tree and exact image cache entry on wake. Suppress it
+     while any fullscreen application is active.
 
 ## Acceptance checks on the board
 
@@ -118,9 +121,10 @@ and adds persistent desktop personalization.
     and reopen the notes. Remove the card while editing and confirm unsaved
     text is not silently discarded.
 11. Set date/time and a negative UTC offset, scroll while adjusting every
-    field, and reboot. Enable the screen saver for each timeout, test both dark
-    and image backgrounds, wake it by touch, and confirm it never appears over
-    the fullscreen note editor. Repeat after removing the SD card.
+    field, and reboot. Enable the screen saver for each timeout and use both
+    arrows to test clock, picture-only and animated starfield modes. Wake each
+    by touch and confirm none appears over the fullscreen note editor. Remove
+    the SD card and confirm picture mode fails safely to black.
 
 ## Exit criterion
 

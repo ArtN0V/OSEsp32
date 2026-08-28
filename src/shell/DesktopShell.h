@@ -23,6 +23,19 @@ enum class ShellAppId : uint8_t {
   About,
 };
 
+enum class ScreenSaverMode : uint8_t {
+  Clock = 0,
+  Picture = 1,
+  Starfield = 2,
+};
+
+struct ScreenSaverStar {
+  int16_t x = 0;
+  int16_t y = 0;
+  uint16_t z = 1;
+  uint16_t previousZ = 1;
+};
+
 class DesktopShell {
  public:
   bool begin(SystemKernel& kernel, BootModeService& bootMode);
@@ -62,6 +75,7 @@ class DesktopShell {
   lv_obj_t* screenSaverOverlay_ = nullptr;
   lv_obj_t* screenSaverTimeLabel_ = nullptr;
   lv_obj_t* screenSaverDateLabel_ = nullptr;
+  lv_obj_t* screenSaverStarField_ = nullptr;
   bool calibrationPreviousPressed_ = false;
   bool rotation180_ = false;
   SystemLanguage language_ = SystemLanguage::English;
@@ -73,6 +87,10 @@ class DesktopShell {
   bool screenSaverVisible_ = false;
   bool fullscreenApplicationActive_ = false;
   uint8_t screenSaverTimeoutIndex_ = 2;
+  ScreenSaverMode screenSaverMode_ = ScreenSaverMode::Clock;
+  static constexpr uint8_t SCREEN_SAVER_STAR_COUNT = 48;
+  ScreenSaverStar* screenSaverStars_ = nullptr;
+  uint32_t lastScreenSaverFrame_ = 0;
   bool previousStorageMounted_ = false;
   StorageEntry fileEntries_[StorageService::PAGE_ENTRIES];
   uint8_t fileEntryCount_ = 0;
@@ -142,6 +160,9 @@ class DesktopShell {
   void showScreenSaver();
   void hideScreenSaver();
   void updateScreenSaverClock();
+  void initializeScreenSaverStars();
+  void updateScreenSaverStars();
+  void resetScreenSaverStar(ScreenSaverStar& star, bool randomDepth);
   void showNoteKeyboard(lv_obj_t* textarea);
   void hideNoteKeyboard();
   bool saveCurrentNote();
@@ -196,9 +217,11 @@ class DesktopShell {
   static void dateTimeSaveEvent(lv_event_t* event);
   static void screenSaverEnabledEvent(lv_event_t* event);
   static void screenSaverTimeoutEvent(lv_event_t* event);
+  static void screenSaverModeEvent(lv_event_t* event);
   static void screenSaverChooseImageEvent(lv_event_t* event);
   static void screenSaverClearImageEvent(lv_event_t* event);
   static void screenSaverWakeEvent(lv_event_t* event);
+  static void screenSaverDrawStarsEvent(lv_event_t* event);
   static void noteCardEvent(lv_event_t* event);
   static void noteTextChangedEvent(lv_event_t* event);
   static void noteTextFocusedEvent(lv_event_t* event);

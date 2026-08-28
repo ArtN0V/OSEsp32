@@ -204,7 +204,10 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
   power loss.
 - Screen-saver activation uses LVGL's display inactivity counter. Fullscreen
   activity suppresses it, and a wake event resets activity.
-- A saver background keeps its original SD path and may decode slowly on
-  entry. It deliberately does not use the desktop OWP cache. On wake, the
-  complete saver object tree and its exact image cache entry are discarded so
-  the steady-state shell does not pay its memory cost.
+- Saver mode is a persistent enum: clock, picture-only or starfield. A picture
+  keeps its original SD path and may decode slowly on entry; it deliberately
+  does not use the desktop OWP cache. Starfield keeps a fixed small star array
+  and draws all streaks through one custom LVGL layer without a framebuffer or
+  per-star widgets. On wake, the complete saver object tree and its exact image
+  cache entry are discarded so the steady-state shell does not pay its memory
+  cost.

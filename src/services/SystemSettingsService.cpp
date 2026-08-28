@@ -13,6 +13,7 @@ constexpr const char* CLOCK_UTC_KEY = "clock_utc";
 constexpr const char* CLOCK_ZONE_KEY = "clock_zone";
 constexpr const char* SCREEN_SAVER_ENABLED_KEY = "ss_enabled";
 constexpr const char* SCREEN_SAVER_TIMEOUT_KEY = "ss_timeout";
+constexpr const char* SCREEN_SAVER_MODE_KEY = "ss_mode";
 constexpr const char* SCREEN_SAVER_IMAGE_KEY = "ss_image";
 constexpr uint8_t DEFAULT_BRIGHTNESS = 255;
 constexpr uint8_t MINIMUM_BRIGHTNESS = 25;
@@ -157,6 +158,23 @@ bool SystemSettingsService::saveScreenSaverTimeout(uint8_t timeoutIndex) const {
   if (!preferences.begin(NVS_NAMESPACE, false)) return false;
   const bool saved = preferences.putUChar(SCREEN_SAVER_TIMEOUT_KEY,
                                            timeoutIndex) == sizeof(uint8_t);
+  preferences.end();
+  return saved;
+}
+
+uint8_t SystemSettingsService::loadScreenSaverMode() const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, true)) return 0;
+  const uint8_t value = preferences.getUChar(SCREEN_SAVER_MODE_KEY, 0);
+  preferences.end();
+  return value;
+}
+
+bool SystemSettingsService::saveScreenSaverMode(uint8_t mode) const {
+  Preferences preferences;
+  if (!preferences.begin(NVS_NAMESPACE, false)) return false;
+  const bool saved = preferences.putUChar(SCREEN_SAVER_MODE_KEY, mode) ==
+                     sizeof(uint8_t);
   preferences.end();
   return saved;
 }

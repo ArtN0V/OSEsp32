@@ -24,6 +24,8 @@ class SystemSettingsService {
   bool saveScreenSaverEnabled(bool enabled) const;
   uint8_t loadScreenSaverTimeout() const;
   bool saveScreenSaverTimeout(uint8_t timeoutIndex) const;
+  uint8_t loadScreenSaverMode() const;
+  bool saveScreenSaverMode(uint8_t mode) const;
   bool loadScreenSaverImage(char* path, size_t pathSize) const;
   bool saveScreenSaverImage(const char* path) const;
   bool clearScreenSaverImage() const;

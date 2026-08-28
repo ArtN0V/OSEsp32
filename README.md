@@ -26,7 +26,8 @@ available as a recovery mode.
   framebuffer.
 - Built-in Notes with an SD-backed card gallery, editor, word wrapping,
   touch cursor placement, explicit save and unsaved-change protection.
-- Optional resource-releasing screen saver with date/time and an SD image.
+- Optional resource-releasing screen saver with clock, picture-only and
+  Windows-style starfield modes.
 - First-boot and Settings-driven five-point touch calibration stored in NVS.
 - Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
   light sensor and memory/stress testing.
@@ -160,12 +161,13 @@ does not start Wi-Fi. The CYD has no battery-backed real-time clock: time runs
 normally while powered, but after a complete power loss it resumes from the
 last manually saved value and cannot account for the powered-off interval.
 
-**Settings → Screen saver** enables it, selects an inactivity delay and may
-use any supported SD image behind a centered clock/date panel. The image is
-decoded only when the saver opens; when it closes, its LVGL object tree and
-exact image cache entry are discarded. The saver is suppressed in fullscreen
-applications such as the note editor. Remove the SD card to fall back safely
-to the dark clock background.
+**Settings → Screen saver** enables it and selects an inactivity delay. Use the
+left/right arrows to choose a centered clock/date panel, a picture-only mode,
+or a Windows-style starfield flying outward from the center. Picture mode uses
+any supported SD image and decodes it only when the saver opens. When the saver
+closes, its LVGL object tree and exact image cache entry are discarded. The
+saver is suppressed in fullscreen applications such as the note editor. If
+the selected picture is unavailable, picture mode safely displays black.
 
 ## Dependencies
 

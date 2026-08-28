@@ -139,6 +139,11 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   screenSaverTimeoutIndex_ = settings_.loadScreenSaverTimeout();
   if (screenSaverTimeoutIndex_ >= SCREEN_SAVER_TIMEOUT_COUNT)
     screenSaverTimeoutIndex_ = 2;
+  const uint8_t savedScreenSaverMode = settings_.loadScreenSaverMode();
+  screenSaverMode_ = savedScreenSaverMode <=
+                             static_cast<uint8_t>(ScreenSaverMode::Starfield)
+                         ? static_cast<ScreenSaverMode>(savedScreenSaverMode)
+                         : ScreenSaverMode::Clock;
   settings_.loadScreenSaverImage(screenSaverImagePath_,
                                  sizeof(screenSaverImagePath_));
   localization_.setLanguage(language_);
@@ -342,6 +347,19 @@ void DesktopShell::configureKeyboard(lv_obj_t* keyboard) {
   lv_obj_set_style_pad_all(keyboard, 2, 0);
   lv_obj_set_style_pad_row(keyboard, 2, 0);
   lv_obj_set_style_pad_column(keyboard, 2, 0);
+  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xD7DCE1), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xF8F9FA), LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(keyboard, lv_color_hex(COLOR_ACCENT),
+                            LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_bg_color(keyboard, lv_color_hex(0xC8E4FA),
+                            LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(keyboard, lv_color_hex(0x202020), LV_PART_ITEMS);
+  lv_obj_set_style_text_color(keyboard, lv_color_white(),
+                              LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_border_width(keyboard, 1, LV_PART_ITEMS);
+  lv_obj_set_style_border_color(keyboard, lv_color_hex(0xAAB2BA),
+                                LV_PART_ITEMS);
   lv_obj_set_style_text_font(keyboard, uiSmallFont(), LV_PART_ITEMS);
   if (language_ == SystemLanguage::Russian) {
     lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER,
@@ -841,19 +859,39 @@ void DesktopShell::openScreenSaverSettings() {
   createSettingsRow(content, LV_SYMBOL_REFRESH,
                     tr("Start after", "Запускать через"), timeout,
                     90, screenSaverTimeoutEvent);
+
+  createButton(content, LV_SYMBOL_LEFT, 12, 141, 42, 43,
+               screenSaverModeEvent, nullptr);
+  lv_obj_t* modePanel = lv_obj_create(content);
+  lv_obj_set_pos(modePanel, 59, 141);
+  lv_obj_set_size(modePanel, 188, 43);
+  configurePanel(modePanel, 0xFFFFFF, 5);
+  lv_obj_set_style_border_width(modePanel, 1, 0);
+  lv_obj_set_style_border_color(modePanel, lv_color_hex(0xC8CDD2), 0);
+  lv_obj_t* modeLabel = lv_label_create(modePanel);
+  const char* modeText = tr("Clock", "Часы");
+  if (screenSaverMode_ == ScreenSaverMode::Picture)
+    modeText = tr("Picture", "Картинка");
+  else if (screenSaverMode_ == ScreenSaverMode::Starfield)
+    modeText = tr("Starfield", "Звёздное поле");
+  lv_label_set_text(modeLabel, modeText);
+  lv_obj_center(modeLabel);
+  createButton(content, LV_SYMBOL_RIGHT, 252, 141, 42, 43,
+               screenSaverModeEvent,
+               reinterpret_cast<void*>(static_cast<uintptr_t>(1)));
+
   const char* imageName = strrchr(screenSaverImagePath_, '/');
   createSettingsRow(content, LV_SYMBOL_IMAGE,
-                    tr("Background", "Фон"),
+                    tr("Screen saver picture", "Картинка заставки"),
                     screenSaverImagePath_[0]
                         ? (imageName ? imageName + 1 : screenSaverImagePath_)
-                        : tr("Clock on dark background",
-                             "Часы на тёмном фоне"),
-                    141, screenSaverChooseImageEvent);
+                        : tr("Not selected", "Не выбрана"),
+                    192, screenSaverChooseImageEvent);
   if (screenSaverImagePath_[0])
     createSettingsRow(content, LV_SYMBOL_TRASH,
                       tr("Clear background image", "Убрать фоновую картинку"),
-                      tr("Keep date and time", "Оставить дату и время"),
-                      192, screenSaverClearImageEvent);
+                      tr("Picture mode will be black", "Режим будет чёрным"),
+                      243, screenSaverClearImageEvent);
 
   lv_obj_t* help = lv_label_create(content);
   lv_label_set_text(help, tr(
@@ -862,7 +900,7 @@ void DesktopShell::openScreenSaverSettings() {
   lv_obj_set_style_text_font(help, uiSmallFont(), 0);
   lv_obj_set_width(help, 280);
   lv_label_set_long_mode(help, LV_LABEL_LONG_WRAP);
-  lv_obj_set_pos(help, 12, screenSaverImagePath_[0] ? 247 : 200);
+  lv_obj_set_pos(help, 12, screenSaverImagePath_[0] ? 298 : 247);
 }
 
 void DesktopShell::openSystemInfo() {
@@ -1144,10 +1182,14 @@ void DesktopShell::applyDesktopColor() {
 
 void DesktopShell::showNoteKeyboard(lv_obj_t* textarea) {
   if (!noteEditorOpen_ || !noteKeyboard_ || !textarea) return;
-  lv_keyboard_set_textarea(noteKeyboard_, textarea);
+  lv_obj_set_pos(noteKeyboard_, 3, 128);
+  lv_obj_set_size(noteKeyboard_, 314, 109);
   lv_obj_remove_flag(noteKeyboard_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_remove_flag(noteHideKeyboardButton_, LV_OBJ_FLAG_HIDDEN);
   lv_obj_set_height(noteBodyArea_, 56);
+  lv_obj_move_foreground(noteKeyboard_);
+  lv_keyboard_set_textarea(noteKeyboard_, textarea);
+  lv_obj_invalidate(noteKeyboard_);
   noteKeyboardVisible_ = true;
 }
 
@@ -1259,7 +1301,10 @@ void DesktopShell::updateScreenSaver() {
       hideScreenSaver();
       return;
     }
-    updateScreenSaverClock();
+    if (screenSaverMode_ == ScreenSaverMode::Starfield)
+      updateScreenSaverStars();
+    else
+      updateScreenSaverClock();
     return;
   }
   if (!screenSaverEnabled_ || fullscreenApplicationActive_ ||
@@ -1279,15 +1324,18 @@ void DesktopShell::showScreenSaver() {
   lv_obj_set_size(screenSaverOverlay_, board::SCREEN_WIDTH,
                   board::SCREEN_HEIGHT);
   configurePanel(screenSaverOverlay_, 0x07131D);
-  lv_obj_set_style_bg_grad_color(screenSaverOverlay_, lv_color_hex(0x13293D),
-                                 0);
-  lv_obj_set_style_bg_grad_dir(screenSaverOverlay_, LV_GRAD_DIR_VER, 0);
+  if (screenSaverMode_ == ScreenSaverMode::Clock) {
+    lv_obj_set_style_bg_grad_color(screenSaverOverlay_, lv_color_hex(0x13293D),
+                                   0);
+    lv_obj_set_style_bg_grad_dir(screenSaverOverlay_, LV_GRAD_DIR_VER, 0);
+  }
   lv_obj_add_flag(screenSaverOverlay_, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(screenSaverOverlay_, screenSaverWakeEvent,
                       LV_EVENT_PRESSED, nullptr);
 
   screenSaverImageLvPath_[0] = '\0';
-  if (screenSaverImagePath_[0] && storage_.mounted() &&
+  if (screenSaverMode_ == ScreenSaverMode::Picture &&
+      screenSaverImagePath_[0] && storage_.mounted() &&
       storage_.exists(screenSaverImagePath_) &&
       StorageService::makeLvglPath(screenSaverImagePath_,
                                    screenSaverImageLvPath_,
@@ -1306,29 +1354,44 @@ void DesktopShell::showScreenSaver() {
     }
   }
 
-  lv_obj_t* clockPanel = lv_obj_create(screenSaverOverlay_);
-  lv_obj_set_pos(clockPanel, 55, 69);
-  lv_obj_set_size(clockPanel, 210, 102);
-  configurePanel(clockPanel, 0x05090D, 10);
-  lv_obj_remove_flag(clockPanel, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_bg_opa(clockPanel, LV_OPA_70, 0);
-  lv_obj_set_style_border_width(clockPanel, 1, 0);
-  lv_obj_set_style_border_color(clockPanel, lv_color_hex(0xB7D7EA), 0);
-  lv_obj_set_style_border_opa(clockPanel, LV_OPA_50, 0);
+  if (screenSaverMode_ == ScreenSaverMode::Clock) {
+    lv_obj_t* clockPanel = lv_obj_create(screenSaverOverlay_);
+    lv_obj_set_pos(clockPanel, 55, 69);
+    lv_obj_set_size(clockPanel, 210, 102);
+    configurePanel(clockPanel, 0x05090D, 10);
+    lv_obj_remove_flag(clockPanel, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(clockPanel, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(clockPanel, 1, 0);
+    lv_obj_set_style_border_color(clockPanel, lv_color_hex(0xB7D7EA), 0);
+    lv_obj_set_style_border_opa(clockPanel, LV_OPA_50, 0);
 
-  screenSaverTimeLabel_ = lv_label_create(clockPanel);
-  lv_obj_set_style_text_font(screenSaverTimeLabel_, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_color(screenSaverTimeLabel_, lv_color_white(), 0);
-  lv_obj_set_width(screenSaverTimeLabel_, 210);
-  lv_obj_set_pos(screenSaverTimeLabel_, 0, 15);
-  lv_obj_set_style_text_align(screenSaverTimeLabel_, LV_TEXT_ALIGN_CENTER, 0);
-  screenSaverDateLabel_ = lv_label_create(clockPanel);
-  lv_obj_set_style_text_color(screenSaverDateLabel_, lv_color_hex(0xD6E9F5),
-                              0);
-  lv_obj_set_width(screenSaverDateLabel_, 210);
-  lv_obj_set_pos(screenSaverDateLabel_, 0, 59);
-  lv_obj_set_style_text_align(screenSaverDateLabel_, LV_TEXT_ALIGN_CENTER, 0);
-  updateScreenSaverClock();
+    screenSaverTimeLabel_ = lv_label_create(clockPanel);
+    lv_obj_set_style_text_font(screenSaverTimeLabel_, &lv_font_montserrat_28,
+                               0);
+    lv_obj_set_style_text_color(screenSaverTimeLabel_, lv_color_white(), 0);
+    lv_obj_set_width(screenSaverTimeLabel_, 210);
+    lv_obj_set_pos(screenSaverTimeLabel_, 0, 15);
+    lv_obj_set_style_text_align(screenSaverTimeLabel_, LV_TEXT_ALIGN_CENTER,
+                                0);
+    screenSaverDateLabel_ = lv_label_create(clockPanel);
+    lv_obj_set_style_text_color(screenSaverDateLabel_,
+                                lv_color_hex(0xD6E9F5), 0);
+    lv_obj_set_width(screenSaverDateLabel_, 210);
+    lv_obj_set_pos(screenSaverDateLabel_, 0, 59);
+    lv_obj_set_style_text_align(screenSaverDateLabel_, LV_TEXT_ALIGN_CENTER,
+                                0);
+    updateScreenSaverClock();
+  } else if (screenSaverMode_ == ScreenSaverMode::Starfield) {
+    screenSaverStarField_ = lv_obj_create(screenSaverOverlay_);
+    lv_obj_set_pos(screenSaverStarField_, 0, 0);
+    lv_obj_set_size(screenSaverStarField_, board::SCREEN_WIDTH,
+                    board::SCREEN_HEIGHT);
+    configurePanel(screenSaverStarField_, 0x000000);
+    lv_obj_remove_flag(screenSaverStarField_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(screenSaverStarField_, screenSaverDrawStarsEvent,
+                        LV_EVENT_DRAW_MAIN, nullptr);
+    initializeScreenSaverStars();
+  }
   lv_obj_move_foreground(screenSaverOverlay_);
   screenSaverVisible_ = true;
 }
@@ -1339,6 +1402,10 @@ void DesktopShell::hideScreenSaver() {
   screenSaverOverlay_ = nullptr;
   screenSaverTimeLabel_ = nullptr;
   screenSaverDateLabel_ = nullptr;
+  screenSaverStarField_ = nullptr;
+  delete[] screenSaverStars_;
+  screenSaverStars_ = nullptr;
+  lastScreenSaverFrame_ = 0;
   screenSaverVisible_ = false;
   if (screenSaverImageLvPath_[0]) {
     lv_image_cache_drop(screenSaverImageLvPath_);
@@ -1355,6 +1422,45 @@ void DesktopShell::updateScreenSaverClock() {
   dateTime_.formatDate(date, sizeof(date));
   lv_label_set_text(screenSaverTimeLabel_, time);
   lv_label_set_text(screenSaverDateLabel_, date);
+}
+
+void DesktopShell::resetScreenSaverStar(ScreenSaverStar& star,
+                                        bool randomDepth) {
+  do {
+    star.x = static_cast<int16_t>(random(-160, 161));
+    star.y = static_cast<int16_t>(random(-120, 121));
+  } while (abs(star.x) < 16 && abs(star.y) < 16);
+  star.z = randomDepth ? static_cast<uint16_t>(random(48, 257)) : 256;
+  star.previousZ = star.z;
+}
+
+void DesktopShell::initializeScreenSaverStars() {
+  delete[] screenSaverStars_;
+  screenSaverStars_ = new ScreenSaverStar[SCREEN_SAVER_STAR_COUNT];
+  if (!screenSaverStars_) return;
+  for (uint8_t index = 0; index < SCREEN_SAVER_STAR_COUNT; ++index)
+    resetScreenSaverStar(screenSaverStars_[index], true);
+  lastScreenSaverFrame_ = millis();
+}
+
+void DesktopShell::updateScreenSaverStars() {
+  if (!screenSaverStarField_ || !screenSaverStars_) return;
+  const uint32_t now = millis();
+  if (now - lastScreenSaverFrame_ < 40) return;
+  lastScreenSaverFrame_ = now;
+  for (uint8_t index = 0; index < SCREEN_SAVER_STAR_COUNT; ++index) {
+    ScreenSaverStar& star = screenSaverStars_[index];
+    star.previousZ = star.z;
+    star.z = star.z > 6 ? star.z - 6 : 1;
+    const int32_t projectedX = 160 +
+        static_cast<int32_t>(star.x) * 128 / star.z;
+    const int32_t projectedY = 120 +
+        static_cast<int32_t>(star.y) * 128 / star.z;
+    if (star.z <= 6 || projectedX < -8 || projectedX > 327 ||
+        projectedY < -8 || projectedY > 247)
+      resetScreenSaverStar(star, false);
+  }
+  lv_obj_invalidate(screenSaverStarField_);
 }
 
 void DesktopShell::parentDirectory() {
@@ -1702,6 +1808,9 @@ void DesktopShell::setScreenSaverImageEvent(lv_event_t*) {
   }
   strlcpy(active_->screenSaverImagePath_, active_->selectedImagePath_,
           sizeof(active_->screenSaverImagePath_));
+  active_->screenSaverMode_ = ScreenSaverMode::Picture;
+  active_->settings_.saveScreenSaverMode(
+      static_cast<uint8_t>(active_->screenSaverMode_));
   active_->setTaskText(active_->tr("Screen saver image saved",
                                    "Картинка заставки сохранена"));
 }
@@ -1752,6 +1861,21 @@ void DesktopShell::screenSaverTimeoutEvent(lv_event_t*) {
   active_->openScreenSaverSettings();
 }
 
+void DesktopShell::screenSaverModeEvent(lv_event_t* event) {
+  const bool next = reinterpret_cast<uintptr_t>(
+                        lv_event_get_user_data(event)) != 0;
+  int8_t mode = static_cast<int8_t>(active_->screenSaverMode_);
+  mode += next ? 1 : -1;
+  if (mode < 0) mode = static_cast<int8_t>(ScreenSaverMode::Starfield);
+  if (mode > static_cast<int8_t>(ScreenSaverMode::Starfield)) mode = 0;
+  const ScreenSaverMode selected = static_cast<ScreenSaverMode>(mode);
+  if (!active_->settings_.saveScreenSaverMode(static_cast<uint8_t>(selected)))
+    return;
+  active_->screenSaverMode_ = selected;
+  lv_display_trigger_activity(nullptr);
+  active_->openScreenSaverSettings();
+}
+
 void DesktopShell::screenSaverChooseImageEvent(lv_event_t*) {
   strlcpy(active_->currentPath_, "/", sizeof(active_->currentPath_));
   active_->filePage_ = 0;
@@ -1766,6 +1890,42 @@ void DesktopShell::screenSaverClearImageEvent(lv_event_t*) {
 
 void DesktopShell::screenSaverWakeEvent(lv_event_t*) {
   active_->hideScreenSaver();
+}
+
+void DesktopShell::screenSaverDrawStarsEvent(lv_event_t* event) {
+  if (!active_ || !active_->screenSaverStarField_ ||
+      !active_->screenSaverStars_)
+    return;
+  lv_layer_t* layer = lv_event_get_layer(event);
+  if (!layer) return;
+  lv_area_t coordinates;
+  lv_obj_get_coords(active_->screenSaverStarField_, &coordinates);
+  for (uint8_t index = 0; index < SCREEN_SAVER_STAR_COUNT; ++index) {
+    const ScreenSaverStar& star = active_->screenSaverStars_[index];
+    if (!star.z || !star.previousZ) continue;
+    const int32_t currentX = coordinates.x1 + 160 +
+        static_cast<int32_t>(star.x) * 128 / star.z;
+    const int32_t currentY = coordinates.y1 + 120 +
+        static_cast<int32_t>(star.y) * 128 / star.z;
+    const int32_t previousX = coordinates.x1 + 160 +
+        static_cast<int32_t>(star.x) * 128 / star.previousZ;
+    const int32_t previousY = coordinates.y1 + 120 +
+        static_cast<int32_t>(star.y) * 128 / star.previousZ;
+    lv_draw_line_dsc_t line;
+    lv_draw_line_dsc_init(&line);
+    line.color = lv_color_white();
+    const int32_t brightness = constrain(300 - static_cast<int32_t>(star.z),
+                                         70, 255);
+    line.opa = static_cast<lv_opa_t>(brightness);
+    line.width = star.z < 72 ? 2 : 1;
+    line.round_start = 1;
+    line.round_end = 1;
+    line.p1.x = previousX;
+    line.p1.y = previousY;
+    line.p2.x = currentX;
+    line.p2.y = currentY;
+    lv_draw_line(layer, &line);
+  }
 }
 
 void DesktopShell::noteCardEvent(lv_event_t* event) {
