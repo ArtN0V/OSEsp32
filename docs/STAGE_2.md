@@ -1,5 +1,9 @@
 # Roadmap Stage 2 — graphical shell
 
+Status: historical stage document. The Text Input demo described below was
+later replaced by Notes. Its keyboard implementation did not survive that
+integration and must not be treated as current acceptance evidence.
+
 ## Goal
 
 Replace the foreground diagnostic screen with a small Windows-inspired LVGL

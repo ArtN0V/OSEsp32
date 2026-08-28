@@ -4,8 +4,9 @@ OSEsp32 is a lightweight Windows-inspired application environment for the
 ESP32-2432S028 Cheap Yellow Display. The project is built as a normal Arduino
 IDE sketch while keeping the implementation in modular C++ files.
 
-Stages 0–2 established the hardware, platform foundation and graphical shell.
-Development is now on **Roadmap Stage 3: storage, files and personalization**.
+Stages 0–2 established the hardware, platform foundation and graphical shell;
+most Stage 3 storage and personalization work is present. Development is now
+on **Stage 3.1: stabilization and system UI extraction** before the YAP runtime.
 The normal boot opens the LVGL desktop; the proven diagnostic UI remains
 available as a recovery mode.
 
@@ -18,12 +19,11 @@ available as a recovery mode.
 - Windows-style scrollable Settings list for display, language, touch,
   date/time and screen-saver options, including six persistent desktop color
   themes.
-- English interface by default plus persistent Russian localization and a
-  Cyrillic on-screen keyboard.
+- English interface by default plus persistent Russian localization and
+  embedded Cyrillic fonts.
 - Settings for brightness, touch calibration, wallpaper reset and persistent
   0/180-degree screen rotation.
-- Compact on-screen keyboard and partial LVGL rendering without a full
-  framebuffer.
+- Partial LVGL rendering without a full framebuffer.
 - Built-in Notes with an SD-backed card gallery, editor, word wrapping,
   touch cursor placement, explicit save and unsaved-change protection.
 - Optional resource-releasing screen saver with clock, picture-only and
@@ -126,9 +126,9 @@ Touch calibration remains valid across the two orientations.
 
 Open **Settings → Language** and choose **English** or **Русский**. English is
 the first-boot default. The choice is stored in NVS and OSEsp32 restarts to
-apply the matching interface font everywhere. Russian mode also replaces the
-text keyboard with a compact Cyrillic layout; the `1#` key still opens the
-standard number/symbol page. Recovery hardware diagnostics intentionally stay
+apply the matching interface font everywhere. The current firmware also
+contains a compact Cyrillic keyboard map; its rendering is not yet accepted on
+hardware and is being replaced in Stage 3.1. Recovery hardware diagnostics stay
 in English so their output remains consistent with the Stage 0 test guide.
 
 The interface embeds one compressed ASCII+Cyrillic font family for both
@@ -147,11 +147,16 @@ current wallpaper; use **Clear Wallpaper** to reveal it.
 Open **Notes** from the desktop or Start menu. The first card creates a note;
 saved notes appear as rounded preview cards and the page scrolls when needed.
 A note has a bold title and a word-wrapped body. Tap either field to place the
-cursor and show the matching English or Russian keyboard. The toolbar can hide
-the keyboard, save, or return to the gallery; returning with unsaved changes
-offers Save, Don't Save and Cancel. Notes use atomic `.note` files under
+cursor. The toolbar can save or return to the gallery; returning with unsaved
+changes offers Save, Don't Save and Cancel. Notes use atomic `.note` files under
 `/OSEsp32/Notes`, so a failed replacement does not intentionally destroy the
 previous saved version.
+
+The current Notes-owned `lv_keyboard` is a known hardware blocker: focus and
+the hide-button state change, but the key matrix remains invisible on the
+target board. Stage 3.1 replaces it with the reusable system component defined
+in [docs/SYSTEM_KEYBOARD.md](docs/SYSTEM_KEYBOARD.md). Until that physical
+check passes, text entry in Notes must be treated as incomplete.
 
 ### Date, time and screen saver
 
@@ -208,10 +213,14 @@ src/diagnostics/          hardware diagnostic application
 docs/HARDWARE.md          known and unverified hardware facts
 docs/STAGE_0.md           exact test procedure and acceptance criteria
 docs/ARCHITECTURE.md      long-term OSEsp32 boundaries
+docs/PROJECT_MAP.md       actual source ownership, boot flow and persistent data
+docs/AUDIT.md             verified strengths, risks and refactoring decisions
+docs/SYSTEM_KEYBOARD.md   reusable keyboard architecture and hardware gate
 docs/ROADMAP.md           development stages
 docs/STAGE_1.md           platform-foundation plan and acceptance checks
 docs/STAGE_2.md           graphical-shell plan and acceptance checks
 docs/STAGE_3.md           storage and personalization plan and checks
+docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 ```
 

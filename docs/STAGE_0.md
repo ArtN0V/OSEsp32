@@ -107,7 +107,7 @@ Acceptance:
 
 - mount, write, read and content checks all report `PASS`;
 - card type and capacity are plausible;
-- `/yellowos_stage0.tmp` is absent after completion;
+- `/osesp32_sd_test.tmp` is absent after completion;
 - repeating the test ten times produces no failure.
 
 On failure, try another FAT32 card before changing code. Then verify CS GPIO5
@@ -147,7 +147,7 @@ Acceptance:
 - animation continues without corruption;
 - no crash, watchdog reset or brownout;
 - heap does not continuously decline on repeated runs;
-- `/yellowos_stress.tmp` is removed.
+- `/osesp32_stress.tmp` is removed.
 
 Run the stress test at least ten times. Record the worst observed heap values.
 
@@ -158,7 +158,7 @@ Run the stress test at least ten times. Record the worst observed heap values.
 | Identity and memory | PASS | Passed on physical board, 2026-08-25 |
 | TFT | PASS | Passed on physical board, 2026-08-25 |
 | Backlight | PASS | Passed on physical board, 2026-08-25 |
-| Touch | RETEST | Both axes were reversed; inversion fix applied |
+| Touch | PASS | Both axes were reversed initially; inversion and five-point calibration verified on the physical board |
 | SD | PASS | Passed on physical board, 2026-08-25 |
 | RGB/speaker/LDR | PASS | Passed on physical board, 2026-08-25 |
 | Combined stress | PASS | Passed on physical board, 2026-08-25 |

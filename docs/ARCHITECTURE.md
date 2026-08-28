@@ -1,5 +1,10 @@
 # OSEsp32 architecture decisions
 
+This document contains both current Stage 3.1 decisions and explicitly planned
+Stage 4 boundaries. For the exact source that exists today, start with
+`PROJECT_MAP.md`. Types such as `AppStorageService`, the Lua runtime and the
+application/network tasks are plans, not implemented components.
+
 ## Product boundary
 
 OSEsp32 is an embedded application environment, not a replacement for the
@@ -15,6 +20,42 @@ sandboxed application runtime.
 4. `ui`: LVGL port, theme, compositor and window manager.
 5. `shell`: desktop, Start menu, taskbar, dialogs and system applications.
 6. `runtime`: one constrained Lua VM for the active `.yap` application.
+
+The directory layout already follows the first five names, but the current
+implementation is not fully separated: `DesktopShell` constructs most services
+and contains the window manager plus all built-in graphical applications.
+Stage 3.1 extracts shared system overlays first instead of attempting a broad
+rewrite.
+
+## Current composition and target composition
+
+Current:
+
+```text
+OSEsp32App
+  -> SystemKernel
+  -> BootModeService
+  -> DesktopShell
+       -> LvglPort + Storage/Settings/Notes/Wallpaper/Time services
+       -> desktop + windows + built-in apps + overlays
+  OR DiagnosticsApp
+```
+
+Incremental target:
+
+```text
+OSEsp32App (composition root)
+  -> kernel and hardware-facing services
+  -> graphical environment
+       -> LvglPort
+       -> system overlays (keyboard, dialogs, file picker, exit control)
+       -> DesktopShell/window manager
+       -> built-in app controllers
+       -> one optional YAP runtime
+```
+
+The target keeps a single LVGL-mutating loop. Moving ownership upward does not
+authorize background tasks to touch LVGL.
 
 ## Non-negotiable constraints
 
@@ -60,6 +101,10 @@ classic ESP32 cannot isolate a faulty native application from the OS.
 - System task: settings, monitoring and lifecycle.
 - Network task: created only while network functionality is requested.
 
+Only the cooperative Arduino/UI loop exists today. The storage, application,
+system and network task bullets above describe possible Stage 4/7 separation,
+not current FreeRTOS tasks.
+
 Stages 2 and 3 run the kernel, LVGL and serialized storage service
 cooperatively from the Arduino loop. This keeps both LVGL object mutation and
 SD access single-owner on the no-PSRAM target. Recovery diagnostics remain
@@ -92,6 +137,10 @@ must instead use streamed resources or an explicit page-oriented API whose
 objects are handles, not pointers.
 
 ## Application storage and capabilities
+
+Everything in this section is a Stage 4 contract. The current
+`StorageService` is a trusted built-in shell service, not yet the capability
+layer described below.
 
 All application I/O passes through an `AppStorageService` layered over the
 single-owner `StorageService`. Lua never receives `File`, `FILE*`, LVGL drive
@@ -193,6 +242,9 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 - The editor is fullscreen and sets the same shell lifecycle flag that future
   fullscreen `.yap` applications use. This suppresses the screen saver without
   coupling the saver to Notes specifically.
+- Text entry is not accepted on hardware. Notes must adopt the system-owned
+  input component in `SYSTEM_KEYBOARD.md`; it may not keep an application-owned
+  keyboard object.
 
 ## Stage 3 clock and screen-saver policy
 
@@ -206,8 +258,36 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
   activity suppresses it, and a wake event resets activity.
 - Saver mode is a persistent enum: clock, picture-only or starfield. A picture
   keeps its original SD path and may decode slowly on entry; it deliberately
-  does not use the desktop OWP cache. Starfield keeps a fixed small star array
-  and draws all streaks through one custom LVGL layer without a framebuffer or
-  per-star widgets. On wake, the complete saver object tree and its exact image
-  cache entry are discarded so the steady-state shell does not pay its memory
-  cost.
+  does not use the desktop OWP cache. Starfield allocates a small star array
+  only while active and draws all streaks through one custom LVGL layer without
+  a framebuffer or per-star widgets. On wake, the array, complete saver object
+  tree and exact image cache entry are discarded so the steady-state shell does
+  not pay their memory cost.
+
+## System UI overlay policy
+
+- Keyboard, confirmation dialogs, future Open/Save picker and exclusive-app
+  exit control are OS-owned overlays. An application requests them and never
+  creates, deletes or retains their LVGL roots.
+- Each overlay has one owner, an idempotent show/hide contract and an explicit
+  shutdown path. Event callbacks must not synchronously delete their current
+  event target.
+- Overlay stacking is defined centrally. Application content receives the
+  remaining work area when a docked overlay such as the keyboard becomes
+  visible.
+- The first extraction is `SystemKeyboard`, implemented as a directly
+  controlled `lv_buttonmatrix` with an application-neutral input-client
+  adapter. See `SYSTEM_KEYBOARD.md`.
+
+## Current trusted-storage policy
+
+- `StorageService` is the only shell-mode owner of Arduino `SD`; diagnostic
+  mode uses a separate driver only because the two modes are mutually
+  exclusive.
+- Every public path operation uses one bounded component canonicalizer. It
+  accepts UTF-8 bytes but rejects traversal components, control characters,
+  backslashes, reserved separators and overlong output.
+- Rename is non-overwriting. Transactional replacement first preserves the
+  existing destination as `.bak`, installs the completed temporary file, then
+  removes the backup. FAT is not fully power-fail-safe; recognized remnant
+  recovery is still required before third-party document replacement ships.

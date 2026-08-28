@@ -1,5 +1,8 @@
 # Roadmap Stage 4 — sandboxed YAP runtime
 
+Status: planned. No YAP parser, Lua VM, `AppStorageService` or application task
+exists in the current source tree. Stage 3.1 is a prerequisite.
+
 ## Goal
 
 Launch one external `.yap` application safely from SD, give it predictable RAM
@@ -112,16 +115,17 @@ part of OSEsp32.
 
 ## Implementation order
 
-1. Runtime/allocator footprint spike and version freeze.
-2. YAP1 parser, validator and manifest capability model.
-3. Minimal Hello World in windowed mode.
-4. Lifecycle manager and exclusive shell teardown/rebuild.
-5. Instruction/time enforcement and system exit path.
-6. `app:/` and `data:/` storage with fixed handle table.
-7. Shell-owned Open/Save dialogs and exact-file capabilities.
-8. Transactional save/recovery and SD-removal pause flow.
-9. File round-trip sample, packaging tool skeleton and endurance tests.
-10. File-association registry with Open with conflict resolution and persisted
+1. Confirm Stage 3.1 system keyboard and shared-overlay lifecycle gates.
+2. Runtime/allocator footprint spike and version freeze.
+3. YAP1 parser, validator and manifest capability model.
+4. Minimal Hello World in windowed mode.
+5. Lifecycle manager and exclusive shell teardown/rebuild.
+6. Instruction/time enforcement and system exit path.
+7. `app:/` and `data:/` storage with fixed handle table.
+8. Shell-owned Open/Save dialogs and exact-file capabilities.
+9. Transactional save/recovery and SD-removal pause flow.
+10. File round-trip sample, packaging tool skeleton and endurance tests.
+11. File-association registry with Open with conflict resolution and persisted
     user defaults.
 
 ## Acceptance checks

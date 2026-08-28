@@ -43,11 +43,11 @@ invert Y: yes
 
 The first on-device test confirmed that both raw axes run opposite to the
 landscape screen axes, so `TOUCH_INVERT_X` and `TOUCH_INVERT_Y` are enabled.
-The numeric limits remain provisional. Touch calibration collects
-values at all four corners and the center before they are refined. The
-diagnostic five-point wizard calculates the limits by linear regression and
-stores the result in the `yellow_touch` NVS namespace; the constants above are
-only fallback values.
+The numeric limits are fallback values. Touch calibration collects values at
+all four corners and the center. The diagnostic/shell five-point wizard
+calculates refined limits by linear regression and stores them in the
+`osesp32_touch` NVS namespace. `yellow_touch` is read only as a migration source
+for early development builds.
 
 ## Expected memory profile
 

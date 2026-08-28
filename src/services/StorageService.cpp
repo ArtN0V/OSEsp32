@@ -70,13 +70,37 @@ void StorageService::update() {
 const char* StorageService::normalizePath(const char* path, char* buffer,
                                           size_t bufferSize) {
   if (!path || !buffer || bufferSize < 2) return nullptr;
-  if (strstr(path, "..")) return nullptr;
-  if (path[0] == '/') {
-    strlcpy(buffer, path, bufferSize);
-  } else {
-    buffer[0] = '/';
-    strlcpy(buffer + 1, path, bufferSize - 1);
+  size_t outputLength = 0;
+  buffer[outputLength++] = '/';
+  const char* cursor = path;
+  while (*cursor == '/') ++cursor;
+  while (*cursor) {
+    const char* component = cursor;
+    size_t componentLength = 0;
+    while (cursor[componentLength] && cursor[componentLength] != '/') {
+      const uint8_t character = static_cast<uint8_t>(cursor[componentLength]);
+      if (character < 0x20 || character == 0x7F || character == '\\' ||
+          character == ':' || character == '*' || character == '?' ||
+          character == '"' || character == '<' || character == '>' ||
+          character == '|')
+        return nullptr;
+      ++componentLength;
+    }
+    if ((componentLength == 1 && component[0] == '.') ||
+        (componentLength == 2 && component[0] == '.' && component[1] == '.'))
+      return nullptr;
+    if (!componentLength) return nullptr;
+    if (outputLength > 1) {
+      if (outputLength + 1 >= bufferSize) return nullptr;
+      buffer[outputLength++] = '/';
+    }
+    if (outputLength + componentLength >= bufferSize) return nullptr;
+    memcpy(buffer + outputLength, component, componentLength);
+    outputLength += componentLength;
+    cursor += componentLength;
+    while (*cursor == '/') ++cursor;
   }
+  buffer[outputLength] = '\0';
   return buffer;
 }
 
@@ -112,24 +136,63 @@ bool StorageService::listDirectoryPage(const char* path, uint16_t offset,
 }
 
 bool StorageService::exists(const char* path) const {
-  return mounted_ && path && SD.exists(path);
+  char normalized[129];
+  return mounted_ && normalizePath(path, normalized, sizeof(normalized)) &&
+         SD.exists(normalized);
 }
 
 bool StorageService::removePath(const char* path) {
-  return mounted_ && path && (!SD.exists(path) || SD.remove(path));
+  char normalized[129];
+  return mounted_ && normalizePath(path, normalized, sizeof(normalized)) &&
+         strcmp(normalized, "/") &&
+         (!SD.exists(normalized) || SD.remove(normalized));
 }
 
 bool StorageService::renamePath(const char* from, const char* to) {
-  if (!mounted_ || !from || !to || !SD.exists(from)) return false;
-  if (SD.exists(to) && !SD.remove(to)) return false;
-  return SD.rename(from, to);
+  char normalizedFrom[129];
+  char normalizedTo[129];
+  if (!mounted_ ||
+      !normalizePath(from, normalizedFrom, sizeof(normalizedFrom)) ||
+      !normalizePath(to, normalizedTo, sizeof(normalizedTo)) ||
+      !strcmp(normalizedFrom, "/") || !strcmp(normalizedTo, "/") ||
+      !strcmp(normalizedFrom, normalizedTo) || !SD.exists(normalizedFrom) ||
+      SD.exists(normalizedTo))
+    return false;
+  return SD.rename(normalizedFrom, normalizedTo);
+}
+
+bool StorageService::replacePathAtomic(const char* completedTemporary,
+                                       const char* destination) {
+  char temporary[145];
+  char target[129];
+  if (!mounted_ ||
+      !normalizePath(completedTemporary, temporary, sizeof(temporary)) ||
+      !normalizePath(destination, target, sizeof(target)) ||
+      !strcmp(temporary, "/") || !strcmp(target, "/") ||
+      !strcmp(temporary, target) || !SD.exists(temporary))
+    return false;
+  char backup[145];
+  if (snprintf(backup, sizeof(backup), "%s.bak", target) >=
+      static_cast<int>(sizeof(backup)))
+    return false;
+  if (SD.exists(backup) && !SD.remove(backup)) return false;
+  const bool hadOriginal = SD.exists(target);
+  if (hadOriginal && !SD.rename(target, backup)) return false;
+  if (!SD.rename(temporary, target)) {
+    if (hadOriginal) SD.rename(backup, target);
+    return false;
+  }
+  if (hadOriginal) SD.remove(backup);
+  return true;
 }
 
 bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
                               size_t& length, bool allowTruncate) {
   length = 0;
   if (!mounted_ || !path || !buffer || capacity < 2) return false;
-  File file = SD.open(path, FILE_READ);
+  char normalized[129];
+  if (!normalizePath(path, normalized, sizeof(normalized))) return false;
+  File file = SD.open(normalized, FILE_READ);
   if (!file || file.isDirectory()) {
     if (file) file.close();
     return false;
@@ -148,13 +211,14 @@ bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
 
 bool StorageService::writeFileAtomic(const char* path, const uint8_t* data,
                                      size_t length) {
-  if (!mounted_ || !path || !data || !path[0]) return false;
+  if (!mounted_ || !path || (!data && length) || !path[0]) return false;
+  char normalized[129];
+  if (!normalizePath(path, normalized, sizeof(normalized)) ||
+      !strcmp(normalized, "/"))
+    return false;
   char temporary[145];
-  char backup[145];
-  if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >=
-          static_cast<int>(sizeof(temporary)) ||
-      snprintf(backup, sizeof(backup), "%s.bak", path) >=
-          static_cast<int>(sizeof(backup)))
+  if (snprintf(temporary, sizeof(temporary), "%s.tmp", normalized) >=
+      static_cast<int>(sizeof(temporary)))
     return false;
 
   if (SD.exists(temporary)) SD.remove(temporary);
@@ -168,21 +232,10 @@ bool StorageService::writeFileAtomic(const char* path, const uint8_t* data,
     return false;
   }
 
-  if (SD.exists(backup) && !SD.remove(backup)) {
+  if (!replacePathAtomic(temporary, normalized)) {
     SD.remove(temporary);
     return false;
   }
-  const bool hadOriginal = SD.exists(path);
-  if (hadOriginal && !SD.rename(path, backup)) {
-    SD.remove(temporary);
-    return false;
-  }
-  if (!SD.rename(temporary, path)) {
-    if (hadOriginal) SD.rename(backup, path);
-    SD.remove(temporary);
-    return false;
-  }
-  if (hadOriginal) SD.remove(backup);
   return true;
 }
 

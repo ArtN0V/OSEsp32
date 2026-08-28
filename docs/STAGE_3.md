@@ -1,5 +1,9 @@
 # Roadmap Stage 3 — storage, files and personalization
 
+Status: feature implementation is present, but the stage is **not accepted**.
+The Notes-owned keyboard matrix remains invisible on the physical board. Its
+replacement is the first work package of Stage 3.1.
+
 ## Goal
 
 Make SD content useful entirely from the touch UI while retaining predictable
@@ -54,6 +58,9 @@ and adds persistent desktop personalization.
    - Give English and Russian the same four-row structure, control-key colors
      and key proportions. Russian includes `ё`, `ъ`, Space, Enter, arrows,
      hide, mode and OK keys.
+   - Result: maps, dimensions and styles compile, but the key matrix is not
+     visible on the target board. This implementation is rejected rather than
+     accepted based on source inspection alone; see `SYSTEM_KEYBOARD.md`.
 
 7. **Settings and localization**
    - Replace the flat group of setting buttons with a Windows-style category
@@ -83,8 +90,8 @@ and adds persistent desktop personalization.
      `setUtc()` as the later NTP entry point without enabling Wi-Fi in Stage 3.
    - Trigger the saver from LVGL inactivity and provide persistent arrow-based
      selection between clock, picture-only and Windows-style starfield modes.
-     Draw the animated stars in one custom layer with fixed state rather than
-     allocating a widget per star.
+     Draw the animated stars in one custom layer with a small transient state
+     array rather than allocating a widget per star.
    - Destroy the saver tree and exact image cache entry on wake. Suppress it
      while any fullscreen application is active.
 
@@ -128,6 +135,7 @@ and adds persistent desktop personalization.
 
 ## Exit criterion
 
-All eleven checks pass without a crash, stuck SD mount, clipped keyboard row,
-touch inversion or persistent heap loss. The `.yap` application runtime remains
-the explicit start of Stage 4.
+Checks 2–11 describe the remaining Stage 3 regression suite. Check 1 is
+currently failing and is moved to the stronger reusable-keyboard gate in Stage
+3.1. The `.yap` runtime remains blocked until every Stage 3.1 exit condition
+passes.

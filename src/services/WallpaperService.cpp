@@ -154,7 +154,8 @@ bool WallpaperService::optimize(const char* sourceLvglPath,
 
   lv_fs_close(&output);
   lv_image_decoder_close(&source);
-  if (!success || !storage_->renamePath(TEMP_SD_PATH, OPTIMIZED_SD_PATH)) {
+  if (!success ||
+      !storage_->replacePathAtomic(TEMP_SD_PATH, OPTIMIZED_SD_PATH)) {
     storage_->removePath(TEMP_SD_PATH);
     logger_->warning("wallpaper", "OWP optimization failed");
     return false;

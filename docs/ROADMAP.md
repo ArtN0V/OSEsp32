@@ -17,7 +17,7 @@ setup and Settings.
 Integrate LVGL partial rendering and build the Windows-inspired theme, desktop,
 taskbar, Start menu, dialogs and touch keyboard.
 
-## Stage 3 — storage, files and personalization (current)
+## Stage 3 — storage, files and personalization (feature-complete, not accepted)
 
 Build serialized SD service, file manager, file associations, application data
 directories and safe behavior when a card is removed or damaged. Add streamed
@@ -28,6 +28,18 @@ version because this board has no PSRAM. Replace Text Input with SD-backed
 Notes, make Settings scrollable, add a manual date/time service prepared for a
 later NTP source, and add a resource-releasing clock, picture-only and animated
 starfield screen saver that is disabled while fullscreen applications run.
+
+The feature set is present, but Stage 3 is not accepted because the Notes-owned
+keyboard matrix remains invisible on the target board.
+
+## Stage 3.1 — stabilization and system UI extraction (current)
+
+Replace the Notes-specific keyboard with a reusable system overlay built from
+a directly controlled button matrix and prove it first in an isolated hardware
+test. Harden path canonicalization and transactional replacement, document the
+actual code ownership, then begin extracting shared overlays from the monolithic
+`DesktopShell`. See [STAGE_3_1.md](STAGE_3_1.md) and
+[SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md).
 
 ## Stage 4 — application runtime
 
@@ -46,6 +58,10 @@ Build the first complete `.yap` execution path rather than only embedding Lua:
   explicit errors and atomic save/replace;
 - load Hello World and a file round-trip test from SD, then prove repeated
   launch/close returns heap and the largest free block to a stable baseline.
+
+Stage 4 may not begin until the Stage 3.1 system keyboard and shared-overlay
+lifecycle pass on hardware; YAP applications must consume those services rather
+than adding their own keyboards or file dialogs.
 
 Do not implement a general SD swap file. Code and resources may be streamed,
 and an explicit paged-data API can be added later, but Lua heap and native UI
