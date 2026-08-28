@@ -14,8 +14,8 @@ isolated system component with its own physical test screen.
 
 ## Boundary and ownership
 
-Create `SystemKeyboard` under `src/ui/`. It is a system overlay, not a Notes
-widget and not part of a third-party application.
+`SystemKeyboard` is implemented under `src/ui/`. It is a system overlay, not a
+Notes widget and not part of a third-party application.
 
 - Exactly one `SystemKeyboard` instance exists.
 - During the incremental Stage 3.1 refactor it may be constructed by
@@ -62,10 +62,12 @@ class TextInputClient {
 };
 ```
 
-Stage 3.1 supplies an `LvglTextareaInputClient` adapter. Notes owns that adapter
-and may switch its target between title and body; `SystemKeyboard` never owns
-either textarea. A future YAP adapter will translate the same operations into
-runtime events without exposing LVGL pointers or native memory.
+Stage 3.1 supplies an `LvglTextareaInputClient` adapter. The isolated Keyboard
+Test currently owns the first adapter. After its physical acceptance, Notes
+will own another adapter and may switch its target between title and body;
+`SystemKeyboard` never owns either textarea. A future YAP adapter will translate
+the same operations into runtime events without exposing LVGL pointers or
+native memory.
 
 `show(client, options)` is idempotent and replaces the previous session only
 after notifying it. `hide(reason)` detaches the client before changing LVGL
@@ -99,9 +101,9 @@ update loop.
 
 ## Diagnostics and observability
 
-Before Notes adopts the service, add a minimal Keyboard Test reachable from
-Settings or System Info. It contains one textarea, a visible keyboard frame and
-a live line showing:
+Before Notes adopts the service, the firmware exposes a minimal **System Info →
+Keyboard Test** screen. It contains one textarea, Show/Hide and EN/RU controls,
+a visible keyboard frame and live diagnostics showing:
 
 - service state;
 - matrix width/height and absolute coordinates;
@@ -114,12 +116,14 @@ a system dialog instead of presenting a hide button for an invisible keyboard.
 
 ## Implementation sequence
 
-1. Build `SystemKeyboard` with a custom `lv_buttonmatrix` and fixed English
-   layout; add the isolated physical Keyboard Test.
-2. Add Russian and symbols; verify identical styling and all controls.
-3. Add the LVGL textarea adapter and cursor/Enter semantics.
+1. **Implemented; awaiting hardware acceptance:** build `SystemKeyboard` with
+   a custom `lv_buttonmatrix` and add the isolated Keyboard Test.
+2. **Implemented; awaiting hardware acceptance:** add Russian, case switching
+   and symbols with one geometry/style definition.
+3. **Implemented; awaiting hardware acceptance:** add the LVGL textarea adapter
+   and explicit text, cursor, Enter, Backspace, Hide and Done dispatch.
 4. Make Notes request the service and remove every `noteKeyboard_` field and
-   callback from `DesktopShell`.
+   callback from `DesktopShell`. Do this only after steps 1–3 pass on the board.
 5. Test repeated show/hide, field switching, window close and SD removal while
    recording heap and largest-block baselines.
 6. Move construction to the graphical composition root when `DesktopShell` is

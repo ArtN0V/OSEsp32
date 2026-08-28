@@ -153,6 +153,11 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
                              "LVGL port initialization failed");
     return false;
   }
+  if (!systemKeyboard_.begin(lv_layer_top(), uiSmallFont(), kernel_->logger()))
+    kernel_->faults().report(FaultCode::InternalError, "keyboard",
+                             "system keyboard initialization failed");
+  keyboardTestClient_.setVisibilityCallback(keyboardTestVisibilityChanged,
+                                             this);
 
   storage_.begin(kernel_->events(), kernel_->logger());
   notes_.begin(storage_);
@@ -201,7 +206,10 @@ void DesktopShell::update() {
 
 void DesktopShell::setFullscreenApplicationActive(bool active) {
   fullscreenApplicationActive_ = active;
-  if (active) hideScreenSaver();
+  if (active) {
+    hideScreenSaver();
+    systemKeyboard_.hide();
+  }
   lv_display_trigger_activity(nullptr);
 }
 
@@ -476,6 +484,8 @@ lv_obj_t* DesktopShell::createWindow(const char* title) {
 
 void DesktopShell::closeWindow() {
   closeDialog();
+  systemKeyboard_.hide();
+  keyboardTestClient_.setTarget(nullptr);
   // The Notes keyboard is a screen-level system panel, not a child of the
   // application window. Delete it explicitly before deleting the window.
   if (noteKeyboard_) {
@@ -490,6 +500,8 @@ void DesktopShell::closeWindow() {
   noteBodyArea_ = nullptr;
   noteHideKeyboardButton_ = nullptr;
   dateTimeContent_ = nullptr;
+  keyboardTestArea_ = nullptr;
+  keyboardTestMetricsLabel_ = nullptr;
   noteEditorOpen_ = false;
   noteKeyboardVisible_ = false;
   fullscreenApplicationActive_ = false;
@@ -930,8 +942,89 @@ void DesktopShell::openSystemInfo() {
   lv_obj_t* label = lv_label_create(content);
   lv_label_set_text(label, info);
   lv_obj_set_pos(label, 10, 8);
-  createButton(content, tr("HARDWARE DIAGNOSTICS", "ДИАГНОСТИКА ОБОРУДОВАНИЯ"), 42, 104, 220, 36,
-               diagnosticsEvent);
+  createButton(content, tr("KEYBOARD TEST", "ТЕСТ КЛАВИАТУРЫ"), 42, 91,
+               220, 29, keyboardTestEvent);
+  createButton(content,
+               tr("HARDWARE DIAGNOSTICS", "ДИАГНОСТИКА ОБОРУДОВАНИЯ"),
+               42, 126, 220, 29, diagnosticsEvent);
+}
+
+void DesktopShell::openKeyboardTest() {
+  lv_obj_t* content = createWindow(tr("Keyboard Test", "Тест клавиатуры"));
+  keyboardTestArea_ = lv_textarea_create(content);
+  lv_obj_set_pos(keyboardTestArea_, 4, 2);
+  lv_obj_set_size(keyboardTestArea_, 298, 31);
+  lv_textarea_set_one_line(keyboardTestArea_, false);
+  lv_textarea_set_max_length(keyboardTestArea_, 160);
+  lv_textarea_set_placeholder_text(
+      keyboardTestArea_, tr("Type here...", "Введите текст..."));
+  lv_textarea_set_cursor_click_pos(keyboardTestArea_, true);
+  lv_obj_add_event_cb(keyboardTestArea_, keyboardTestTextChangedEvent,
+                      LV_EVENT_VALUE_CHANGED, nullptr);
+  keyboardTestClient_.setTarget(keyboardTestArea_);
+
+  keyboardTestMetricsLabel_ = lv_label_create(content);
+  lv_obj_set_pos(keyboardTestMetricsLabel_, 4, 36);
+  lv_obj_set_width(keyboardTestMetricsLabel_, 298);
+  lv_obj_set_style_text_font(keyboardTestMetricsLabel_, uiSmallFont(), 0);
+
+  createButton(content, tr("SHOW", "ПОКАЗАТЬ"), 4, 66, 82, 25,
+               keyboardTestShowEvent);
+  createButton(content, tr("HIDE", "СКРЫТЬ"), 91, 66, 76, 25,
+               keyboardTestHideEvent);
+  createButton(content, "EN / RU", 172, 66, 130, 25,
+               keyboardTestLanguageEvent);
+
+  keyboardTestLanguage_ = language_ == SystemLanguage::Russian
+                              ? KeyboardLanguage::Russian
+                              : KeyboardLanguage::English;
+  updateKeyboardTestMetrics();
+  showKeyboardTestKeyboard();
+}
+
+bool DesktopShell::showKeyboardTestKeyboard() {
+  if (!keyboardTestArea_) return false;
+  keyboardTestClient_.setTarget(keyboardTestArea_);
+  if (!systemKeyboard_.show(keyboardTestClient_, keyboardTestLanguage_)) {
+    kernel_->faults().report(FaultCode::InternalError, "keyboard",
+                             "keyboard test could not show matrix");
+    showInfoDialog(tr("System keyboard could not be displayed.",
+                      "Не удалось показать системную клавиатуру."));
+    return false;
+  }
+  lv_obj_add_state(keyboardTestArea_, LV_STATE_FOCUSED);
+  lv_textarea_set_cursor_pos(keyboardTestArea_, LV_TEXTAREA_CURSOR_LAST);
+  updateKeyboardTestMetrics();
+  return true;
+}
+
+void DesktopShell::updateKeyboardTestMetrics() {
+  if (!keyboardTestMetricsLabel_) return;
+  const SystemKeyboardMetrics& metrics = systemKeyboard_.metrics();
+  const char* state = metrics.state == KeyboardState::Visible
+                          ? "VISIBLE"
+                          : metrics.state == KeyboardState::Hidden ? "HIDDEN"
+                                                                   : "OFF";
+  const char* language = metrics.language == KeyboardLanguage::Russian
+                             ? "RU"
+                             : "EN";
+  const char* layout = metrics.layout == KeyboardLayout::Upper
+                           ? "UP"
+                           : metrics.layout == KeyboardLayout::Symbols ? "SYM"
+                                                                       : "LOW";
+  char details[196];
+  snprintf(details, sizeof(details),
+           "%s %s/%s  keys:%u  %d,%d %dx%d\n"
+           "show:%lu hide:%lu heap:%lu>%lu block:%lu client:%u",
+           state, language, layout, metrics.keyCount, metrics.x, metrics.y,
+           metrics.width, metrics.height,
+           static_cast<unsigned long>(metrics.showCount),
+           static_cast<unsigned long>(metrics.hideCount),
+           static_cast<unsigned long>(metrics.heapBeforeShow),
+           static_cast<unsigned long>(metrics.heapAfterShow),
+           static_cast<unsigned long>(metrics.largestBlockAfterShow),
+           metrics.clientAttached ? 1 : 0);
+  lv_label_set_text(keyboardTestMetricsLabel_, details);
 }
 
 void DesktopShell::openNotes() {
@@ -1727,6 +1820,36 @@ void DesktopShell::resetCalibrationEvent(lv_event_t*) {
 
 void DesktopShell::diagnosticsEvent(lv_event_t*) {
   active_->showDiagnosticsDialog();
+}
+
+void DesktopShell::keyboardTestEvent(lv_event_t*) {
+  active_->openKeyboardTest();
+}
+
+void DesktopShell::keyboardTestShowEvent(lv_event_t*) {
+  active_->showKeyboardTestKeyboard();
+}
+
+void DesktopShell::keyboardTestHideEvent(lv_event_t*) {
+  active_->systemKeyboard_.hide();
+  active_->updateKeyboardTestMetrics();
+}
+
+void DesktopShell::keyboardTestLanguageEvent(lv_event_t*) {
+  active_->keyboardTestLanguage_ =
+      active_->keyboardTestLanguage_ == KeyboardLanguage::English
+          ? KeyboardLanguage::Russian
+          : KeyboardLanguage::English;
+  active_->showKeyboardTestKeyboard();
+}
+
+void DesktopShell::keyboardTestTextChangedEvent(lv_event_t*) {
+  active_->updateKeyboardTestMetrics();
+}
+
+void DesktopShell::keyboardTestVisibilityChanged(bool, uint16_t, void* userData) {
+  DesktopShell* shell = static_cast<DesktopShell*>(userData);
+  if (shell) shell->updateKeyboardTestMetrics();
 }
 
 void DesktopShell::confirmDiagnosticsEvent(lv_event_t*) {

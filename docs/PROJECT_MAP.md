@@ -54,6 +54,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |
+| `src/ui/SystemKeyboard.*` | One OS-owned button-matrix keyboard and application-neutral input-client adapter | Lives on `lv_layer_top()`; lazily retains its hidden object tree and supports explicit `shutdown()`. Currently exercised only by Keyboard Test. |
 | `src/ui/OSEsp32Font*` | Embedded regular/bold ASCII+Cyrillic fonts | Generated assets; see `THIRD_PARTY.md`. |
 | `src/shell/DesktopShell.*` | Desktop plus every built-in graphical application | Current monolith and main refactoring target. |
 | `src/diagnostics/DiagnosticsApp.*` | Recovery test UI and Serial commands | Intentionally synchronous and English-only. |
@@ -61,10 +62,12 @@ Arduino global `SD` implementation without concurrent access.
 ## Current graphical object ownership
 
 `DesktopShell` owns the active screen, desktop, one foreground window, dialogs,
-calibration overlay, Notes editor, screen saver and current keyboard. LVGL
-callbacks route through the static `DesktopShell::active_` pointer. This works
-for a single shell instance but is not the target architecture for reusable
-system UI.
+calibration overlay, Notes editor, screen saver, the legacy Notes keyboard and
+the first `SystemKeyboard` instance. The system keyboard alone owns its overlay
+object tree; `DesktopShell` currently acts as its composition root and hosts the
+isolated test client. LVGL callbacks route through the static
+`DesktopShell::active_` pointer. This works for a single shell instance but is
+not the final composition boundary for reusable system UI.
 
 Target ownership is described in `SYSTEM_KEYBOARD.md`: keyboard and later file
 pickers/dialogs become system overlays with one owner and request-based APIs.

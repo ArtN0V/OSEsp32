@@ -158,6 +158,13 @@ target board. Stage 3.1 replaces it with the reusable system component defined
 in [docs/SYSTEM_KEYBOARD.md](docs/SYSTEM_KEYBOARD.md). Until that physical
 check passes, text entry in Notes must be treated as incomplete.
 
+The first replacement implementation can now be checked independently through
+**System Info → Keyboard Test**. It uses a custom four-row button matrix rather
+than the problematic Notes widget. Verify English and Russian text, case and
+symbol switching, Space, Enter, Backspace, cursor arrows and Show/Hide there.
+Its diagnostic lines report state, key count, geometry and heap values. This
+test does not yet change the keyboard used by Notes.
+
 ### Date, time and screen saver
 
 **Settings → Date & time** currently sets the clock and UTC offset manually.

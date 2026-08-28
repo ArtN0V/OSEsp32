@@ -41,6 +41,10 @@ actual code ownership, then begin extracting shared overlays from the monolithic
 `DesktopShell`. See [STAGE_3_1.md](STAGE_3_1.md) and
 [SYSTEM_KEYBOARD.md](SYSTEM_KEYBOARD.md).
 
+Current checkpoint: the first reusable `SystemKeyboard` implementation and its
+isolated **System Info → Keyboard Test** are build-complete. Hardware acceptance
+is still required before replacing the Notes-owned keyboard.
+
 ## Stage 4 — application runtime
 
 Build the first complete `.yap` execution path rather than only embedding Lua:

@@ -14,6 +14,7 @@
 #include "../services/WallpaperService.h"
 #include "../ui/LvglPort.h"
 #include "../ui/OSEsp32Font.h"
+#include "../ui/SystemKeyboard.h"
 
 enum class ShellAppId : uint8_t {
   Files,
@@ -55,6 +56,8 @@ class DesktopShell {
   WallpaperService wallpaperService_;
   LvglPort port_;
   TouchCalibrationService calibration_;
+  SystemKeyboard systemKeyboard_;
+  LvglTextareaInputClient keyboardTestClient_;
 
   lv_obj_t* screen_ = nullptr;
   lv_obj_t* taskLabel_ = nullptr;
@@ -72,6 +75,8 @@ class DesktopShell {
   lv_obj_t* noteKeyboard_ = nullptr;
   lv_obj_t* noteHideKeyboardButton_ = nullptr;
   lv_obj_t* dateTimeContent_ = nullptr;
+  lv_obj_t* keyboardTestArea_ = nullptr;
+  lv_obj_t* keyboardTestMetricsLabel_ = nullptr;
   lv_obj_t* screenSaverOverlay_ = nullptr;
   lv_obj_t* screenSaverTimeLabel_ = nullptr;
   lv_obj_t* screenSaverDateLabel_ = nullptr;
@@ -113,6 +118,7 @@ class DesktopShell {
   bool dateTimeEditPrepared_ = false;
   int32_t dateTimeScrollY_ = 0;
   uint32_t lastClockSecond_ = UINT32_MAX;
+  KeyboardLanguage keyboardTestLanguage_ = KeyboardLanguage::English;
 
   void buildDesktop();
   void buildTaskbar();
@@ -145,6 +151,7 @@ class DesktopShell {
   void openDateTimeSettings();
   void openScreenSaverSettings();
   void openSystemInfo();
+  void openKeyboardTest();
   void openNotes();
   void openNoteEditor(const char* path = nullptr);
   void openAbout();
@@ -168,6 +175,8 @@ class DesktopShell {
   bool saveCurrentNote();
   void requestNoteExit();
   void showNoteExitDialog();
+  bool showKeyboardTestKeyboard();
+  void updateKeyboardTestMetrics();
   const char* tr(const char* english, const char* russian) const {
     return localization_.text(english, russian);
   }
@@ -203,6 +212,14 @@ class DesktopShell {
   static void calibrateEvent(lv_event_t* event);
   static void resetCalibrationEvent(lv_event_t* event);
   static void diagnosticsEvent(lv_event_t* event);
+  static void keyboardTestEvent(lv_event_t* event);
+  static void keyboardTestShowEvent(lv_event_t* event);
+  static void keyboardTestHideEvent(lv_event_t* event);
+  static void keyboardTestLanguageEvent(lv_event_t* event);
+  static void keyboardTestTextChangedEvent(lv_event_t* event);
+  static void keyboardTestVisibilityChanged(bool visible,
+                                            uint16_t coveredHeight,
+                                            void* userData);
   static void confirmDiagnosticsEvent(lv_event_t* event);
   static void cancelDialogEvent(lv_event_t* event);
   static void fileEntryEvent(lv_event_t* event);
