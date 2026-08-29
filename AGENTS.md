@@ -28,7 +28,7 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: validate note deletion and the space-swipe keyboard language
-gesture on hardware, while continuing the non-executing Stage 4 foundation.
-YAP1 parsing is implemented; do not execute package code until the Lua
-allocator/hook footprint spike and remaining Stage 3.1 lifecycle checks pass.
+Current priority: physically verify the first short-lived YAP execution slice,
+especially allocator/hook failures and repeated teardown. Do not add persistent
+Lua callbacks, unrestricted SD access, fullscreen or exclusive launch until
+their Stage 4 lifecycle and capability boundaries are implemented.

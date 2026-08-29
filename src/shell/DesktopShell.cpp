@@ -111,6 +111,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   storage_.registerLvglDriver();
   wallpaperService_.begin(storage_, kernel_->logger());
   yapPackages_.begin(storage_, kernel_->logger());
+  yapRuntime_.begin(storage_, kernel_->logger());
   previousStorageMounted_ = storage_.mounted();
   calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger(),
                      rotation180_);
@@ -129,6 +130,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
 void DesktopShell::update() {
   port_.update();
   processPendingNoteDelete();
+  processPendingYapRun();
   storage_.update();
   if (storage_.mounted() != previousStorageMounted_) {
     previousStorageMounted_ = storage_.mounted();
@@ -591,6 +593,7 @@ void DesktopShell::openYapPackage(const char* path) {
     showInfoDialog(message);
     return;
   }
+  strlcpy(selectedYapPath_, path, sizeof(selectedYapPath_));
   lv_obj_t* content = createWindow(tr("YAP Application", "Приложение YAP"));
   lv_obj_t* name = lv_label_create(content);
   lv_label_set_text(name, package.manifest.name);
@@ -618,12 +621,87 @@ void DesktopShell::openYapPackage(const char* path) {
   lv_obj_t* status = lv_label_create(content);
   lv_label_set_text(
       status,
-      tr("Runtime is not installed yet.\nThis package was validated but not executed.",
-         "Среда запуска пока не установлена.\nПакет проверен, но не запускался."));
-  lv_obj_set_pos(status, 10, 112);
-  lv_obj_set_width(status, 288);
-  lv_obj_set_style_text_color(status, lv_color_hex(0x805A00), 0);
+      tr("Package is valid. The app will run inside its memory quota.",
+         "Пакет исправен. Приложение запустится в пределах квоты памяти."));
+  lv_obj_set_pos(status, 10, 105);
+  lv_obj_set_width(status, 205);
+  lv_obj_set_style_text_color(status, lv_color_hex(0x186A3B), 0);
   lv_obj_set_style_text_font(status, uiSmallFont(), 0);
+  createButton(content, tr("RUN", "ЗАПУСК"), 220, 124, 78, 30,
+               yapRunEvent);
+}
+
+void DesktopShell::processPendingYapRun() {
+  if (!yapRunRequested_) return;
+  yapRunRequested_ = false;
+
+  YapPackageInfo package;
+  const YapError error = yapPackages_.inspect(selectedYapPath_, package);
+  if (error != YapError::None) {
+    char message[150];
+    snprintf(message, sizeof(message),
+             tr("YAP package can no longer be opened.\nReason: %s",
+                "Пакет YAP больше не удаётся открыть.\nПричина: %s"),
+             YapPackageService::errorCode(error));
+    showInfoDialog(message);
+    return;
+  }
+
+  systemKeyboard_.hide();
+  setTaskText(tr("Running YAP application...", "Запуск приложения YAP..."));
+  YapRuntimeResult result;
+  yapRuntime_.run(package, result);
+  showYapRuntimeResult(package, result);
+}
+
+void DesktopShell::showYapRuntimeResult(const YapPackageInfo& package,
+                                        const YapRuntimeResult& result) {
+  lv_obj_t* content = createWindow(package.manifest.name);
+  const bool success = result.status == YapRuntimeStatus::Success;
+
+  lv_obj_t* heading = lv_label_create(content);
+  lv_label_set_text(heading,
+                    success ? tr("Application finished", "Приложение завершено")
+                            : tr("Application stopped", "Приложение остановлено"));
+  lv_obj_set_pos(heading, 10, 7);
+  lv_obj_set_style_text_font(heading, &osesp32_font_16_bold, 0);
+  lv_obj_set_style_text_color(
+      heading, lv_color_hex(success ? 0x186A3B : COLOR_DANGER), 0);
+
+  lv_obj_t* output = lv_label_create(content);
+  const char* outputText = success
+                               ? (result.label[0] ? result.label
+                                                  : tr("No output", "Нет вывода"))
+                               : (result.error[0] ? result.error
+                                                  : YapRuntimeService::statusCode(
+                                                        result.status));
+  lv_label_set_text(output, outputText);
+  lv_obj_set_pos(output, 10, 34);
+  lv_obj_set_width(output, 288);
+  lv_obj_set_style_text_font(output, uiSmallFont(), 0);
+
+  char metrics[190];
+  snprintf(metrics, sizeof(metrics),
+           tr("Status: %s   Time: %lu ms\nLua peak: %lu/%lu KiB   after close: %lu B\nHeap: %lu -> %lu   largest: %lu -> %lu",
+              "Статус: %s   Время: %lu мс\nПик Lua: %lu/%lu КиБ   после закрытия: %lu Б\nКуча: %lu -> %lu   блок: %lu -> %lu"),
+           YapRuntimeService::statusCode(result.status),
+           static_cast<unsigned long>(result.elapsedMs),
+           static_cast<unsigned long>(result.peakLuaBytes / 1024),
+           static_cast<unsigned long>(result.quotaBytes / 1024),
+           static_cast<unsigned long>(result.remainingLuaBytes),
+           static_cast<unsigned long>(result.freeHeapBefore),
+           static_cast<unsigned long>(result.freeHeapAfter),
+           static_cast<unsigned long>(result.largestBlockBefore),
+           static_cast<unsigned long>(result.largestBlockAfter));
+  lv_obj_t* diagnostics = lv_label_create(content);
+  lv_label_set_text(diagnostics, metrics);
+  lv_obj_set_pos(diagnostics, 10, 78);
+  lv_obj_set_width(diagnostics, 288);
+  lv_obj_set_style_text_font(diagnostics, uiSmallFont(), 0);
+  lv_obj_set_style_text_color(diagnostics, lv_color_hex(0x555555), 0);
+
+  createButton(content, tr("RUN AGAIN", "ЕЩЁ РАЗ"), 185, 128, 113, 28,
+               yapRunEvent);
 }
 
 void DesktopShell::openSettings() {
@@ -1914,6 +1992,11 @@ void DesktopShell::fileEntryEvent(lv_event_t* event) {
         "No application is associated\nwith this file type yet.",
         "Для этого типа файлов\nпока нет приложения."));
   }
+}
+
+void DesktopShell::yapRunEvent(lv_event_t*) {
+  if (!active_ || !active_->selectedYapPath_[0]) return;
+  active_->yapRunRequested_ = true;
 }
 
 void DesktopShell::filesUpEvent(lv_event_t*) {

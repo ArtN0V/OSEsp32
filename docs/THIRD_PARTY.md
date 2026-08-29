@@ -12,3 +12,14 @@ Noto Sans is Copyright 2012 Google Inc. and is distributed under the
 
 The generated font data was produced with `lv_font_conv`; LVGL's Montserrat
 fonts remain the fallback for symbols that are not present in the subset.
+
+## Lua 5.4.9
+
+`tools/install_lua.py` downloads the official Lua 5.4.9 source archive from
+<https://www.lua.org/ftp/>, verifies SHA-256
+`2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6` and
+places a trimmed source set under `src/vendor/lua549`.
+
+Lua is Copyright 1994–2026 Lua.org, PUC-Rio and is distributed under the
+[Lua license](https://www.lua.org/license.html). OSEsp32 excludes the standard
+`io`, `os`, `package` and `debug` libraries as well as native module loading.

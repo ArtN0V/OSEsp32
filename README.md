@@ -6,9 +6,9 @@ IDE sketch while keeping the implementation in modular C++ files.
 
 Stages 0–2 established the hardware, platform foundation and graphical shell;
 most Stage 3 storage and personalization work is present. Development is now
-on **Stage 3.1: stabilization and system UI extraction** before the YAP runtime.
-The normal boot opens the LVGL desktop; the proven diagnostic UI remains
-available as a recovery mode.
+on **Stage 4: application runtime**; the first constrained, self-terminating
+YAP execution path is implemented. The normal boot opens the LVGL desktop; the
+proven diagnostic UI remains available as a recovery mode.
 
 ## Current capabilities
 
@@ -39,17 +39,20 @@ available as a recovery mode.
    `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
 3. Install **esp32 by Espressif Systems** in Boards Manager.
 4. Install **LovyanGFX** and **lvgl 9.5.0** in Library Manager.
-5. Open `OSEsp32.ino` from this folder.
-6. Select **ESP32 Dev Module**.
-7. Use these initial Tools settings:
+5. The pinned Lua 5.4.9 source is included under `src/vendor/lua549`. To
+   reproduce or refresh it, run `python tools/install_lua.py` once from the
+   project folder; the script checks the official archive's SHA-256.
+6. Open `OSEsp32.ino` from this folder.
+7. Select **ESP32 Dev Module**.
+8. Use these initial Tools settings:
    - CPU Frequency: `240MHz (WiFi/BT)`
    - Flash Frequency: `40MHz`
    - Flash Mode: `QIO` (use `DIO` if boot is unreliable)
    - Flash Size: `4MB (32Mb)`
    - Upload Speed: `460800` (fall back to `115200` if needed)
    - PSRAM: `Disabled`
-8. Compile and upload.
-9. Open Serial Monitor at **115200 baud**, line ending optional.
+9. Compile and upload.
+10. Open Serial Monitor at **115200 baud**, line ending optional.
 
 The project-local `partitions.csv` defines two OTA application slots and a
 small internal SPIFFS area. On first SD mount, OSEsp32 creates `/OSEsp32/Apps`,
@@ -176,17 +179,27 @@ session.
 
 ### YAP applications — Stage 4 foundation
 
-The first Stage 4 slice recognizes `.yap` files in Files and validates the
-frozen YAP1 header, bounded section table, package/section CRCs, manifest,
-memory request, capabilities and associations without loading the whole file
-into RAM. A valid package opens a metadata page; it is not executed yet.
+The first Stage 4 execution slice recognizes `.yap` files in Files, validates
+the frozen YAP1 container without loading it all into RAM, and can run its Lua
+source inside the requested 16–96 KiB quota. A 200,000-instruction/250 ms guard
+stops runaway code. The VM is always closed before OSEsp32 draws the result
+window, which shows peak Lua memory and before/after heap diagnostics.
 
 Build the Hello sample with `tools/yap_pack.py` as documented in
-[examples/hello_yap/README.md](examples/hello_yap/README.md), then copy it to
-`/OSEsp32/Apps`. The exact format is in
+[examples/hello_yap/README.md](examples/hello_yap/README.md), copy it to
+`/OSEsp32/Apps`, open it in Files and press **RUN**. It should show
+`Hello from YAP!` and `after close: 0 B`. The exact format is in
 [docs/YAP1_FORMAT.md](docs/YAP1_FORMAT.md). Lua runtime candidates and the
 required target measurements are tracked in
 [docs/LUA_RUNTIME_SPIKE.md](docs/LUA_RUNTIME_SPIKE.md).
+
+Run `python tools/build_yap_examples.py` to create Hello plus controlled
+compile-error, missing-entry, out-of-memory and infinite-loop packages. Their
+expected results are documented in
+[examples/yap_runtime_tests/README.md](examples/yap_runtime_tests/README.md).
+The current application API contains only `osesp32.ui.label(text)`; application
+file access, persistent events and fullscreen/exclusive launch are not present
+yet.
 
 ### Date, time and screen saver
 
@@ -213,16 +226,14 @@ Required now:
 - LVGL 9.5.0
 - Built-in `SPI`, `FS` and `SD` libraries from Arduino-ESP32
 - Built-in `Preferences` for calibration and one-shot boot settings
+- Pinned trimmed Lua 5.4.9 source for `.yap` execution
 
 The generated Cyrillic glyph data in `src/ui/OSEsp32Font12.c`,
 `src/ui/OSEsp32Font14.c` and `src/ui/OSEsp32Font16Bold.c` is derived from Noto
 Sans, distributed under the Apache License 2.0. See
 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
-Planned for later stages:
-
-- A trimmed Lua runtime for `.yap` applications
-- mbedTLS hashing for package validation
+Planned for later stages: mbedTLS hashing/signatures for packages.
 
 The XPT2046 library is deliberately not required. Touch uses a small software
 SPI driver so the SD card can own the second hardware SPI peripheral.
@@ -239,6 +250,8 @@ src/kernel/               lifecycle, events, logging, faults and monitoring
 src/services/             reusable OS services, including touch calibration
 src/ui/                   LVGL display and calibrated pointer adapter
 src/shell/                desktop, windows and built-in applications
+src/runtime/              constrained YAP Lua execution
+src/vendor/lua549/        pinned trimmed Lua 5.4.9 source
 src/diagnostics/          hardware diagnostic application
 docs/HARDWARE.md          known and unverified hardware facts
 docs/STAGE_0.md           exact test procedure and acceptance criteria

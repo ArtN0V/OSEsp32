@@ -1,6 +1,7 @@
 # Lua runtime footprint spike
 
-Status: candidate selection prepared; target-board measurements are pending.
+Status: Lua 5.4.9 baseline frozen and compiled; target-board dynamic
+measurements are pending.
 
 Official Lua release information checked on 2026-08-29:
 
@@ -8,11 +9,12 @@ Official Lua release information checked on 2026-08-29:
 - Lua 5.4.9 is the final 5.4 release and receives no later 5.4 releases:
   <https://www.lua.org/news.html>.
 
-OSEsp32 keeps **Lua 5.4.9** as the compatibility baseline because the existing
-runtime design was written against 5.4 and the branch is now final. Lua 5.5.1
-is the measured challenger because its more compact arrays may help the
-no-PSRAM board. Neither version is frozen into production until the same
-on-board workload is measured with the table below.
+OSEsp32 freezes **Lua 5.4.9** for the first runtime because the runtime design
+targets 5.4 and that release line is final. It is installed from the official
+archive by `tools/install_lua.py`, verified by SHA-256, trimmed to the selected
+libraries and configured for 32-bit integers/floats. Lua 5.5.1 remains a future
+challenger only if on-board measurements show that 5.4.9 cannot meet the
+no-PSRAM budget; package API v1 does not expose Lua-version-specific behavior.
 
 ## Mandatory build configuration
 
@@ -42,13 +44,22 @@ on-board workload is measured with the table below.
 
 | Metric | Lua 5.4.9 | Lua 5.5.1 |
 |---|---:|---:|
-| Flash increase | pending | pending |
+| Flash increase | 116,136 B (clean PlatformIO build) | not measured |
 | Idle VM heap | pending | pending |
 | Workload peak | pending | pending |
 | Smallest largest-free-block | pending | pending |
 | Heap after 100 closes | pending | pending |
 | Hook/allocator failure returns cleanly | pending | pending |
 
-The smaller reliable result wins; a small footprint advantage cannot override
-failed teardown or quota enforcement. Until this table is filled on the target,
-the firmware validates `.yap` packages but does not execute their `LUAS` bytes.
+The clean firmware build uses 943,289 bytes of flash (51.4% of the 1,835,008
+byte application partition) and 111,108 bytes of static RAM (33.9%). The prior
+build used 827,153 bytes of flash and 110,944 bytes of static RAM. Dynamic heap
+values are intentionally left pending until read from the physical result
+screen.
+
+The current runtime executes only self-terminating source applications. It
+streams the verified `LUAS` section in 256-byte chunks, allows 16–96 KiB of Lua
+heap as requested by the manifest, applies a 200,000-instruction and 250 ms
+limit, and calls `lua_close` before any result UI is created. The only OSEsp32
+API is `osesp32.ui.label(text)`; it copies at most 96 bytes and exposes no LVGL,
+SD or native pointer.

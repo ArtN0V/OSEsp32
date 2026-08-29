@@ -1,9 +1,10 @@
 # Roadmap Stage 4 — sandboxed YAP runtime
 
-Status: foundation in progress. The frozen YAP1 parser/validator, host packer,
-Hello sample and package-information view exist. No Lua VM,
-`AppStorageService` or application task exists yet. The final Stage 3.1
-lifecycle checks remain a gate before executing third-party code.
+Status: first execution slice implemented. The frozen YAP1 parser/validator,
+host packer and package-information view now feed a constrained Lua 5.4.9 VM.
+Windowed Hello and controlled failure examples exist. `AppStorageService`,
+persistent event-driven applications and exclusive lifecycle restoration do
+not exist yet; the target-board runtime checks below remain mandatory.
 
 ## Goal
 
@@ -118,13 +119,16 @@ part of OSEsp32.
 ## Implementation order
 
 1. Confirm Stage 3.1 system keyboard and shared-overlay lifecycle gates.
-2. Runtime/allocator footprint spike and version freeze. **Candidate plan
-   complete; target measurements pending.**
+2. Runtime/allocator footprint spike and version freeze. **Lua 5.4.9 frozen;
+   static build measured, dynamic target measurements pending.**
 3. YAP1 parser, validator and manifest capability model. **Implemented; touch
    UI and malformed-package hardware checks pending.**
-4. Minimal Hello World in windowed mode.
+4. Minimal self-terminating Hello World in windowed mode. **Implemented with
+   streamed source, allocator quota, instruction/time limits and teardown
+   diagnostics; physical checks pending.**
 5. Lifecycle manager and exclusive shell teardown/rebuild.
-6. Instruction/time enforcement and system exit path.
+6. Instruction/time enforcement and system exit path. **Synchronous execution
+   enforcement implemented; persistent-app exit overlay remains.**
 7. `app:/` and `data:/` storage with fixed handle table.
 8. Shell-owned Open/Save dialogs and exact-file capabilities.
 9. Transactional save/recovery and SD-removal pause flow.

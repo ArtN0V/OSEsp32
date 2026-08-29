@@ -1,9 +1,9 @@
 # OSEsp32 architecture decisions
 
-This document contains both current Stage 3.1 decisions and explicitly planned
-Stage 4 boundaries. For the exact source that exists today, start with
-`PROJECT_MAP.md`. Types such as `AppStorageService`, the Lua runtime and the
-application/network tasks are plans, not implemented components.
+This document contains current decisions and planned Stage 4 boundaries. For
+the exact source that exists today, start with `PROJECT_MAP.md`.
+`YapRuntimeService` now exists; `AppStorageService`, persistent application
+sessions and separate application/network tasks remain plans.
 
 ## Product boundary
 
@@ -93,12 +93,19 @@ request never becomes direct hardware or filesystem access.
 Native Xtensa code from SD is explicitly out of scope for version 1 because a
 classic ESP32 cannot isolate a faulty native application from the OS.
 
-The current `YapPackageService` implements only the trust boundary before the
+The current `YapPackageService` implements the trust boundary before the
 runtime: it reads bounded header/section blocks, computes package and section
 CRC32 in 256-byte chunks, rejects malformed bounds/overlap/duplicates and
-validates the fixed manifest. The Files page may display validated metadata,
-but no `LUAS` byte reaches an interpreter yet. Runtime candidate measurements
-and the allocator/hook gate are defined in `LUA_RUNTIME_SPIKE.md`.
+validates the fixed manifest. `YapRuntimeService` then streams only the verified
+`LUAS` section into a new Lua 5.4.9 state, registers the small safe API, calls
+the manifest entry and destroys the state. Runtime measurements and remaining
+hardware gates are defined in `LUA_RUNTIME_SPIKE.md`.
+
+This first slice is deliberately self-terminating: Lua cannot retain callbacks
+or LVGL objects. `osesp32.ui.label(text)` copies one bounded command result,
+and the shell creates its own LVGL result window only after `lua_close`. This
+keeps native UI ownership outside the VM until a bounded event queue and full
+application lifecycle manager exist.
 
 ## Threading model
 

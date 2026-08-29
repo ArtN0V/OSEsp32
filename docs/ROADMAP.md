@@ -49,9 +49,10 @@ checks remain before Stage 3.1 can close.
 
 ## Stage 4 — application runtime
 
-Status: **foundation in progress**. YAP1 is frozen and its streaming validator,
-host packer, Hello sample and Files metadata view are implemented. Package code
-is not executed until the Lua footprint/quota spike is completed on hardware.
+Status: **first execution slice implemented**. YAP1 is frozen; its streaming
+validator, host packer, Files metadata view and constrained Lua 5.4.9 runtime
+are present. Hello runs within a manifest memory quota and the VM is destroyed
+before the result window opens. Dynamic measurements still need the board.
 
 Build the first complete `.yap` execution path rather than only embedding Lua:
 
@@ -69,9 +70,15 @@ Build the first complete `.yap` execution path rather than only embedding Lua:
 - load Hello World and a file round-trip test from SD, then prove repeated
   launch/close returns heap and the largest free block to a stable baseline.
 
-Stage 4 may not begin until the Stage 3.1 system keyboard and shared-overlay
-lifecycle pass on hardware; YAP applications must consume those services rather
-than adding their own keyboards or file dialogs.
+Current checkpoint: windowed, self-terminating source packages can call only
+`osesp32.ui.label`. The VM has a quota allocator and instruction/time hook;
+failure examples cover compile error, missing entry, out of memory and an
+infinite loop. Persistent callbacks, fullscreen/exclusive execution and all
+application file APIs remain later Stage 4 work.
+
+YAP applications must consume Stage 3.1 system services rather than adding
+their own keyboards or file dialogs. The first self-terminating slice does not
+request text input and keeps its result UI system-owned.
 
 Do not implement a general SD swap file. Code and resources may be streamed,
 and an explicit paged-data API can be added later, but Lua heap and native UI

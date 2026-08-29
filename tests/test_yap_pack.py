@@ -60,6 +60,21 @@ class YapPackTests(unittest.TestCase):
                     Path(temporary) / "bad.yap",
                 )
 
+    def test_all_runtime_examples_pack(self):
+        sources = [ROOT / "examples" / "hello_yap" / "main.lua"]
+        sources.extend(
+            sorted((ROOT / "examples" / "yap_runtime_tests").glob("*.lua"))
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            for source in sources:
+                package = Path(temporary) / f"{source.stem}.yap"
+                YAP.pack(
+                    ROOT / "examples" / "hello_yap" / "manifest.json",
+                    source,
+                    package,
+                )
+                YAP.inspect(package, quiet=True)
+
 
 if __name__ == "__main__":
     unittest.main()

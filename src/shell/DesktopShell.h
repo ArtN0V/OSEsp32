@@ -13,6 +13,7 @@
 #include "../services/TouchCalibrationService.h"
 #include "../services/WallpaperService.h"
 #include "../services/YapPackageService.h"
+#include "../runtime/YapRuntimeService.h"
 #include "../ui/LvglPort.h"
 #include "../ui/OSEsp32Font.h"
 #include "../ui/SystemKeyboard.h"
@@ -56,6 +57,7 @@ class DesktopShell {
   NotesService notes_;
   WallpaperService wallpaperService_;
   YapPackageService yapPackages_;
+  YapRuntimeService yapRuntime_;
   LvglPort port_;
   TouchCalibrationService calibration_;
   SystemKeyboard systemKeyboard_;
@@ -106,6 +108,7 @@ class DesktopShell {
   char currentPath_[129] = "/";
   char selectedImagePath_[129] = {};
   char selectedImageLvPath_[132] = {};
+  char selectedYapPath_[129] = {};
   char wallpaperPath_[129] = {};
   char wallpaperLvPath_[132] = {};
   NoteSummary noteSummaries_[NotesService::MAX_NOTES];
@@ -116,6 +119,7 @@ class DesktopShell {
   char pendingNoteDeletePath_[129] = {};
   char pendingNoteDeleteTitle_[NotesService::TITLE_CAPACITY] = {};
   bool noteDeleteConfirmed_ = false;
+  bool yapRunRequested_ = false;
   char screenSaverImagePath_[129] = {};
   char screenSaverImageLvPath_[132] = {};
   struct tm pendingDateTime_ = {};
@@ -149,6 +153,9 @@ class DesktopShell {
   void openFiles();
   void openImage(const char* path);
   void openYapPackage(const char* path);
+  void processPendingYapRun();
+  void showYapRuntimeResult(const YapPackageInfo& package,
+                            const YapRuntimeResult& result);
   void openSettings();
   void openDisplaySettings();
   void openDesktopColorSettings();
@@ -231,6 +238,7 @@ class DesktopShell {
   static void confirmDiagnosticsEvent(lv_event_t* event);
   static void cancelDialogEvent(lv_event_t* event);
   static void fileEntryEvent(lv_event_t* event);
+  static void yapRunEvent(lv_event_t* event);
   static void filesUpEvent(lv_event_t* event);
   static void filesPreviousEvent(lv_event_t* event);
   static void filesNextEvent(lv_event_t* event);
