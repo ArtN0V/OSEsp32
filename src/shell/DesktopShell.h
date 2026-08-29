@@ -12,6 +12,7 @@
 #include "../services/StorageService.h"
 #include "../services/TouchCalibrationService.h"
 #include "../services/WallpaperService.h"
+#include "../services/YapPackageService.h"
 #include "../ui/LvglPort.h"
 #include "../ui/OSEsp32Font.h"
 #include "../ui/SystemKeyboard.h"
@@ -54,6 +55,7 @@ class DesktopShell {
   StorageService storage_;
   NotesService notes_;
   WallpaperService wallpaperService_;
+  YapPackageService yapPackages_;
   LvglPort port_;
   TouchCalibrationService calibration_;
   SystemKeyboard systemKeyboard_;
@@ -111,6 +113,9 @@ class DesktopShell {
   char notePath_[129] = {};
   char noteTitle_[NotesService::TITLE_CAPACITY] = {};
   char noteBody_[NotesService::BODY_CAPACITY] = {};
+  char pendingNoteDeletePath_[129] = {};
+  char pendingNoteDeleteTitle_[NotesService::TITLE_CAPACITY] = {};
+  bool noteDeleteConfirmed_ = false;
   char screenSaverImagePath_[129] = {};
   char screenSaverImageLvPath_[132] = {};
   struct tm pendingDateTime_ = {};
@@ -119,6 +124,7 @@ class DesktopShell {
   int32_t dateTimeScrollY_ = 0;
   uint32_t lastClockSecond_ = UINT32_MAX;
   KeyboardLanguage keyboardTestLanguage_ = KeyboardLanguage::English;
+  KeyboardLanguage keyboardLanguagePreference_ = KeyboardLanguage::English;
 
   void buildDesktop();
   void buildTaskbar();
@@ -142,6 +148,7 @@ class DesktopShell {
   void openApp(ShellAppId app);
   void openFiles();
   void openImage(const char* path);
+  void openYapPackage(const char* path);
   void openSettings();
   void openDisplaySettings();
   void openDesktopColorSettings();
@@ -174,6 +181,8 @@ class DesktopShell {
   bool saveCurrentNote();
   void requestNoteExit();
   void showNoteExitDialog();
+  void showNoteDeleteDialog(uint8_t index);
+  void processPendingNoteDelete();
   bool showKeyboardTestKeyboard();
   void updateKeyboardTestMetrics();
   const char* tr(const char* english, const char* russian) const {
@@ -239,6 +248,8 @@ class DesktopShell {
   static void screenSaverWakeEvent(lv_event_t* event);
   static void screenSaverDrawStarsEvent(lv_event_t* event);
   static void noteCardEvent(lv_event_t* event);
+  static void noteDeleteRequestEvent(lv_event_t* event);
+  static void noteDeleteConfirmEvent(lv_event_t* event);
   static void noteTextChangedEvent(lv_event_t* event);
   static void noteTextFocusedEvent(lv_event_t* event);
   static void noteTitleReadyEvent(lv_event_t* event);

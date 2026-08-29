@@ -104,12 +104,18 @@ class SystemKeyboard {
   KeyboardLayout layout_ = KeyboardLayout::Lower;
   KeyboardState state_ = KeyboardState::Detached;
   SystemKeyboardMetrics metrics_;
+  bool spaceGestureTracking_ = false;
+  bool spaceGestureHandled_ = false;
+  lv_point_t spaceGestureStart_ = {};
+  uint32_t spaceGestureStartedMs_ = 0;
 
   bool createObjects();
   void applyLayout(KeyboardLanguage language, KeyboardLayout layout);
   void configureButtonControls();
   void refreshMetrics();
   void handleKey(const char* text);
+  void handlePointerEvent(lv_event_t* event);
+  void switchLanguage(int8_t direction);
   static uint16_t countButtons(const char* const* map);
   static void matrixEvent(lv_event_t* event);
 };

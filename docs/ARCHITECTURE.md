@@ -70,8 +70,8 @@ authorize background tasks to touch LVGL.
 
 ## Application format
 
-`.yap` means Yellow Application Package. Version 1 is planned as a single,
-uncompressed, seekable container with:
+`.yap` means Yellow Application Package. Version 1 is now frozen as the single,
+uncompressed, seekable container in `YAP1_FORMAT.md`, with:
 
 - fixed `YAP1` header;
 - section table;
@@ -92,6 +92,13 @@ request never becomes direct hardware or filesystem access.
 
 Native Xtensa code from SD is explicitly out of scope for version 1 because a
 classic ESP32 cannot isolate a faulty native application from the OS.
+
+The current `YapPackageService` implements only the trust boundary before the
+runtime: it reads bounded header/section blocks, computes package and section
+CRC32 in 256-byte chunks, rejects malformed bounds/overlap/duplicates and
+validates the fixed manifest. The Files page may display validated metadata,
+but no `LUAS` byte reaches an interpreter yet. Runtime candidate measurements
+and the allocator/hook gate are defined in `LUA_RUNTIME_SPIKE.md`.
 
 ## Threading model
 

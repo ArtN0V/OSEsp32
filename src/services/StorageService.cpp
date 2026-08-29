@@ -209,6 +209,90 @@ bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
   return length == wanted;
 }
 
+bool StorageService::fileSize(const char* path, uint32_t& size) const {
+  size = 0;
+  if (!mounted_ || !path) return false;
+  char normalized[129];
+  if (!normalizePath(path, normalized, sizeof(normalized))) return false;
+  File file = SD.open(normalized, FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    return false;
+  }
+  size = static_cast<uint32_t>(file.size());
+  file.close();
+  return true;
+}
+
+bool StorageService::readFileRange(const char* path, uint32_t offset,
+                                   uint8_t* buffer, size_t length,
+                                   size_t& bytesRead) const {
+  bytesRead = 0;
+  if (!mounted_ || !path || (!buffer && length)) return false;
+  char normalized[129];
+  if (!normalizePath(path, normalized, sizeof(normalized))) return false;
+  File file = SD.open(normalized, FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    return false;
+  }
+  if (offset > static_cast<uint32_t>(file.size()) || !file.seek(offset)) {
+    file.close();
+    return false;
+  }
+  bytesRead = file.read(buffer, length);
+  file.close();
+  return bytesRead == length;
+}
+
+bool StorageService::computeFileCrc32(const char* path, uint32_t offset,
+                                      uint32_t length, uint32_t& crc,
+                                      uint32_t zeroOffset,
+                                      uint32_t zeroLength) const {
+  crc = 0;
+  if (!mounted_ || !path) return false;
+  char normalized[129];
+  if (!normalizePath(path, normalized, sizeof(normalized))) return false;
+  File file = SD.open(normalized, FILE_READ);
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    return false;
+  }
+  const uint32_t size = static_cast<uint32_t>(file.size());
+  if (offset > size || length > size - offset || !file.seek(offset)) {
+    file.close();
+    return false;
+  }
+  uint8_t buffer[256];
+  uint32_t value = 0xFFFFFFFFu;
+  uint32_t consumed = 0;
+  while (consumed < length) {
+    const size_t wanted = min(static_cast<uint32_t>(sizeof(buffer)),
+                              length - consumed);
+    const size_t received = file.read(buffer, wanted);
+    if (received != wanted) {
+      file.close();
+      return false;
+    }
+    for (size_t index = 0; index < received; ++index) {
+      const uint32_t absolute = offset + consumed + index;
+      uint8_t byte = buffer[index];
+      if (zeroOffset != UINT32_MAX && absolute >= zeroOffset &&
+          absolute - zeroOffset < zeroLength)
+        byte = 0;
+      value ^= byte;
+      for (uint8_t bit = 0; bit < 8; ++bit)
+        value = (value >> 1) ^
+                (0xEDB88320u & static_cast<uint32_t>(
+                                      -static_cast<int32_t>(value & 1u)));
+    }
+    consumed += received;
+  }
+  file.close();
+  crc = value ^ 0xFFFFFFFFu;
+  return true;
+}
+
 bool StorageService::writeFileAtomic(const char* path, const uint8_t* data,
                                      size_t length) {
   if (!mounted_ || !path || (!data && length) || !path[0]) return false;
@@ -245,6 +329,12 @@ bool StorageService::isImagePath(const char* path) {
   return extension && (!strcasecmp(extension, ".bmp") ||
                        !strcasecmp(extension, ".jpg") ||
                        !strcasecmp(extension, ".jpeg"));
+}
+
+bool StorageService::isYapPath(const char* path) {
+  if (!path) return false;
+  const char* extension = strrchr(path, '.');
+  return extension && !strcasecmp(extension, ".yap");
 }
 
 bool StorageService::makeLvglPath(const char* sdPath, char* output,

@@ -17,6 +17,7 @@ all project documentation.
 | P2 | Date/time survives runtime but cannot account for powered-off duration. | Documented limitation; future RTC/NTP source enters through `setUtc()`. |
 | P2 | No automated visual/touch test exists. | Isolated Keyboard Test is implemented with geometry/layout/memory telemetry; retain physical stage checklists. |
 | P3 | Localization strings are distributed across `DesktopShell`. | Defer catalog extraction until built-in applications are separated. |
+| P2 | Starting Stage 4 with an interpreter before defining package trust boundaries would expose malformed SD data to the VM. | YAP1 format, streaming CRC/bounds validator and deterministic host packer are implemented before Lua execution is enabled. |
 
 ## Verified strengths
 

@@ -33,9 +33,16 @@ class StorageService {
                          const char* destination);
   bool readFile(const char* path, char* buffer, size_t capacity,
                 size_t& length, bool allowTruncate = false);
+  bool fileSize(const char* path, uint32_t& size) const;
+  bool readFileRange(const char* path, uint32_t offset, uint8_t* buffer,
+                     size_t length, size_t& bytesRead) const;
+  bool computeFileCrc32(const char* path, uint32_t offset, uint32_t length,
+                        uint32_t& crc, uint32_t zeroOffset = UINT32_MAX,
+                        uint32_t zeroLength = 0) const;
   bool writeFileAtomic(const char* path, const uint8_t* data, size_t length);
   bool mounted() const { return mounted_; }
   static bool isImagePath(const char* path);
+  static bool isYapPath(const char* path);
   static bool makeLvglPath(const char* sdPath, char* output, size_t outputSize);
 
  private:

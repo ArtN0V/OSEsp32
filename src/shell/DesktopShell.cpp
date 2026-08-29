@@ -74,6 +74,10 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   bootMode_ = &bootMode;
   rotation180_ = settings_.loadRotation180();
   language_ = settings_.loadLanguage();
+  keyboardLanguagePreference_ = language_ == SystemLanguage::Russian
+                                    ? KeyboardLanguage::Russian
+                                    : KeyboardLanguage::English;
+  keyboardTestLanguage_ = keyboardLanguagePreference_;
   desktopColor_ = settings_.loadDesktopColor();
   if (desktopColor_ >= DESKTOP_COLOR_COUNT) desktopColor_ = 0;
   screenSaverEnabled_ = settings_.loadScreenSaverEnabled();
@@ -106,6 +110,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
   notes_.begin(storage_);
   storage_.registerLvglDriver();
   wallpaperService_.begin(storage_, kernel_->logger());
+  yapPackages_.begin(storage_, kernel_->logger());
   previousStorageMounted_ = storage_.mounted();
   calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger(),
                      rotation180_);
@@ -123,6 +128,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
 
 void DesktopShell::update() {
   port_.update();
+  processPendingNoteDelete();
   storage_.update();
   if (storage_.mounted() != previousStorageMounted_) {
     previousStorageMounted_ = storage_.mounted();
@@ -573,6 +579,53 @@ void DesktopShell::openImage(const char* path) {
                setScreenSaverImageEvent);
 }
 
+void DesktopShell::openYapPackage(const char* path) {
+  YapPackageInfo package;
+  const YapError error = yapPackages_.inspect(path, package);
+  if (error != YapError::None) {
+    char message[150];
+    snprintf(message, sizeof(message),
+             tr("Invalid YAP package.\nReason: %s",
+                "Пакет YAP повреждён.\nПричина: %s"),
+             YapPackageService::errorCode(error));
+    showInfoDialog(message);
+    return;
+  }
+  lv_obj_t* content = createWindow(tr("YAP Application", "Приложение YAP"));
+  lv_obj_t* name = lv_label_create(content);
+  lv_label_set_text(name, package.manifest.name);
+  lv_obj_set_pos(name, 10, 7);
+  lv_obj_set_width(name, 288);
+  lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+  lv_obj_set_style_text_font(name, &osesp32_font_16_bold, 0);
+  lv_obj_set_style_text_color(name, lv_color_hex(COLOR_TITLE), 0);
+
+  char details[260];
+  snprintf(details, sizeof(details),
+           tr("ID: %s\nMode: %s   API: %u.%u\nMemory: %lu KiB   Sections: %u\nCRC and manifest: valid",
+              "ID: %s\nРежим: %s   API: %u.%u\nПамять: %lu КиБ   Секций: %u\nCRC и манифест: исправны"),
+           package.manifest.appId,
+           YapPackageService::launchModeName(package.manifest.launchMode),
+           package.manifest.apiMajor, package.manifest.apiMinor,
+           static_cast<unsigned long>(package.manifest.requestedMemory / 1024),
+           package.sectionCount);
+  lv_obj_t* information = lv_label_create(content);
+  lv_label_set_text(information, details);
+  lv_obj_set_pos(information, 10, 37);
+  lv_obj_set_width(information, 288);
+  lv_obj_set_style_text_font(information, uiSmallFont(), 0);
+
+  lv_obj_t* status = lv_label_create(content);
+  lv_label_set_text(
+      status,
+      tr("Runtime is not installed yet.\nThis package was validated but not executed.",
+         "Среда запуска пока не установлена.\nПакет проверен, но не запускался."));
+  lv_obj_set_pos(status, 10, 112);
+  lv_obj_set_width(status, 288);
+  lv_obj_set_style_text_color(status, lv_color_hex(0x805A00), 0);
+  lv_obj_set_style_text_font(status, uiSmallFont(), 0);
+}
+
 void DesktopShell::openSettings() {
   lv_obj_t* content = createWindow(tr("Settings", "Параметры"));
   lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
@@ -888,9 +941,7 @@ void DesktopShell::openKeyboardTest() {
   createButton(content, "EN / RU", 172, 66, 130, 25,
                keyboardTestLanguageEvent);
 
-  keyboardTestLanguage_ = language_ == SystemLanguage::Russian
-                              ? KeyboardLanguage::Russian
-                              : KeyboardLanguage::English;
+  keyboardTestLanguage_ = keyboardLanguagePreference_;
   updateKeyboardTestMetrics();
   showKeyboardTestKeyboard();
 }
@@ -997,6 +1048,26 @@ void DesktopShell::openNotes() {
     }
 
     const NoteSummary& summary = noteSummaries_[noteIndex];
+    lv_obj_t* deleteButton = lv_button_create(card);
+    lv_obj_set_pos(deleteButton, 68, 3);
+    lv_obj_set_size(deleteButton, 21, 21);
+    lv_obj_set_style_radius(deleteButton, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(deleteButton, lv_color_hex(0xFDE7E9), 0);
+    lv_obj_set_style_bg_color(deleteButton, lv_color_hex(0xC42B1C),
+                              LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(deleteButton, 1, 0);
+    lv_obj_set_style_border_color(deleteButton, lv_color_hex(0xC42B1C), 0);
+    lv_obj_set_style_pad_all(deleteButton, 0, 0);
+    lv_obj_remove_flag(deleteButton, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(
+        deleteButton, noteDeleteRequestEvent, LV_EVENT_CLICKED,
+        reinterpret_cast<void*>(static_cast<uintptr_t>(noteIndex)));
+    lv_obj_t* deleteLabel = lv_label_create(deleteButton);
+    lv_label_set_text(deleteLabel, "X");
+    lv_obj_set_style_text_font(deleteLabel, uiSmallFont(), 0);
+    lv_obj_set_style_text_color(deleteLabel, lv_color_hex(0xA30F1A), 0);
+    lv_obj_center(deleteLabel);
+
     lv_obj_t* preview = lv_label_create(card);
     lv_label_set_text(preview,
                       summary.preview[0] ? summary.preview : tr("Empty note", "Пустая заметка"));
@@ -1014,6 +1085,7 @@ void DesktopShell::openNotes() {
     lv_obj_set_pos(title, 7, 67);
     lv_obj_set_width(title, 78);
     lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    lv_obj_move_foreground(deleteButton);
   }
 }
 
@@ -1188,9 +1260,7 @@ void DesktopShell::applyDesktopColor() {
 void DesktopShell::showNoteKeyboard(lv_obj_t* textarea) {
   if (!noteEditorOpen_ || !textarea || !lv_obj_is_valid(textarea)) return;
   noteKeyboardClient_.setTarget(textarea);
-  const KeyboardLanguage language = language_ == SystemLanguage::Russian
-                                        ? KeyboardLanguage::Russian
-                                        : KeyboardLanguage::English;
+  const KeyboardLanguage language = keyboardLanguagePreference_;
   if (systemKeyboard_.visible()) {
     noteKeyboardVisibilityChanged(true, SystemKeyboard::HEIGHT, this);
   } else if (!systemKeyboard_.show(noteKeyboardClient_, language)) {
@@ -1263,6 +1333,59 @@ void DesktopShell::showNoteExitDialog() {
   createButton(dialog_, tr("CANCEL", "ОТМЕНА"), 193, 70, 80, 32,
                cancelDialogEvent);
   lv_obj_move_foreground(dialog_);
+}
+
+void DesktopShell::showNoteDeleteDialog(uint8_t index) {
+  if (index >= noteCount_) return;
+  strlcpy(pendingNoteDeletePath_, noteSummaries_[index].path,
+          sizeof(pendingNoteDeletePath_));
+  strlcpy(pendingNoteDeleteTitle_,
+          noteSummaries_[index].title[0]
+              ? noteSummaries_[index].title
+              : tr("Untitled", "Без названия"),
+          sizeof(pendingNoteDeleteTitle_));
+  noteDeleteConfirmed_ = false;
+  closeDialog();
+  dialog_ = lv_obj_create(screen_);
+  lv_obj_set_pos(dialog_, 20, 62);
+  lv_obj_set_size(dialog_, 280, 114);
+  configurePanel(dialog_, 0xF7F7F7, 4);
+  lv_obj_set_style_border_width(dialog_, 2, 0);
+  lv_obj_set_style_border_color(dialog_, lv_color_hex(COLOR_DANGER), 0);
+  char message[190];
+  snprintf(message, sizeof(message),
+           tr("Delete note \"%s\"?\nThis cannot be undone.",
+              "Удалить заметку «%s»?\nЭто действие необратимо."),
+           pendingNoteDeleteTitle_);
+  lv_obj_t* label = lv_label_create(dialog_);
+  lv_label_set_text(label, message);
+  lv_obj_set_pos(label, 10, 12);
+  lv_obj_set_width(label, 260);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  createButton(dialog_, tr("CANCEL", "ОТМЕНА"), 24, 72, 102, 31,
+               cancelDialogEvent);
+  lv_obj_t* removeButton = createButton(
+      dialog_, tr("DELETE", "УДАЛИТЬ"), 154, 72, 102, 31,
+      noteDeleteConfirmEvent);
+  lv_obj_set_style_bg_color(removeButton, lv_color_hex(COLOR_DANGER), 0);
+  lv_obj_move_foreground(dialog_);
+}
+
+void DesktopShell::processPendingNoteDelete() {
+  if (!noteDeleteConfirmed_) return;
+  noteDeleteConfirmed_ = false;
+  char path[sizeof(pendingNoteDeletePath_)];
+  strlcpy(path, pendingNoteDeletePath_, sizeof(path));
+  pendingNoteDeletePath_[0] = '\0';
+  pendingNoteDeleteTitle_[0] = '\0';
+  closeDialog();
+  const bool removed = notes_.remove(path);
+  openNotes();
+  if (!removed)
+    showInfoDialog(tr("Could not delete the note.",
+                      "Не удалось удалить заметку."));
+  else
+    setTaskText(tr("Note deleted", "Заметка удалена"));
 }
 
 void DesktopShell::adjustPendingDateTime(uint8_t field, int8_t delta) {
@@ -1740,6 +1863,7 @@ void DesktopShell::keyboardTestLanguageEvent(lv_event_t*) {
       active_->keyboardTestLanguage_ == KeyboardLanguage::English
           ? KeyboardLanguage::Russian
           : KeyboardLanguage::English;
+  active_->keyboardLanguagePreference_ = active_->keyboardTestLanguage_;
   active_->showKeyboardTestKeyboard();
 }
 
@@ -1749,7 +1873,11 @@ void DesktopShell::keyboardTestTextChangedEvent(lv_event_t*) {
 
 void DesktopShell::keyboardTestVisibilityChanged(bool, uint16_t, void* userData) {
   DesktopShell* shell = static_cast<DesktopShell*>(userData);
-  if (shell) shell->updateKeyboardTestMetrics();
+  if (shell) {
+    shell->keyboardTestLanguage_ = shell->systemKeyboard_.metrics().language;
+    shell->keyboardLanguagePreference_ = shell->keyboardTestLanguage_;
+    shell->updateKeyboardTestMetrics();
+  }
 }
 
 void DesktopShell::confirmDiagnosticsEvent(lv_event_t*) {
@@ -1779,6 +1907,8 @@ void DesktopShell::fileEntryEvent(lv_event_t* event) {
     active_->openFiles();
   } else if (StorageService::isImagePath(entry.path)) {
     active_->openImage(entry.path);
+  } else if (StorageService::isYapPath(entry.path)) {
+    active_->openYapPackage(entry.path);
   } else {
     active_->showInfoDialog(active_->tr(
         "No application is associated\nwith this file type yet.",
@@ -1973,6 +2103,17 @@ void DesktopShell::noteCardEvent(lv_event_t* event) {
     active_->openNoteEditor(active_->noteSummaries_[index].path);
 }
 
+void DesktopShell::noteDeleteRequestEvent(lv_event_t* event) {
+  lv_event_stop_bubbling(event);
+  const uint8_t index = static_cast<uint8_t>(
+      reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+  active_->showNoteDeleteDialog(index);
+}
+
+void DesktopShell::noteDeleteConfirmEvent(lv_event_t*) {
+  active_->noteDeleteConfirmed_ = true;
+}
+
 void DesktopShell::noteTextChangedEvent(lv_event_t*) {
   if (active_->noteEditorOpen_) active_->noteDirty_ = true;
 }
@@ -1993,6 +2134,9 @@ void DesktopShell::noteKeyboardVisibilityChanged(bool visible,
                                                   void* userData) {
   DesktopShell* shell = static_cast<DesktopShell*>(userData);
   if (!shell || !shell->noteEditorOpen_) return;
+  if (visible)
+    shell->keyboardLanguagePreference_ =
+        shell->systemKeyboard_.metrics().language;
   shell->noteKeyboardVisible_ = visible;
   if (shell->noteHideKeyboardButton_) {
     if (visible)

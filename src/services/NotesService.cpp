@@ -115,3 +115,12 @@ bool NotesService::save(char* path, size_t pathCapacity, const char* title,
   delete[] document;
   return saved;
 }
+
+bool NotesService::remove(const char* path) {
+  if (!storage_ || !storage_->mounted() || !isNotePath(path)) return false;
+  constexpr size_t directoryLength = 15;  // strlen("/OSEsp32/Notes/")
+  if (strncmp(path, "/OSEsp32/Notes/", directoryLength) ||
+      !path[directoryLength] || strchr(path + directoryLength, '/'))
+    return false;
+  return storage_->removePath(path);
+}

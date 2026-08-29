@@ -1,0 +1,10 @@
+{
+  "id": "org.osesp32.hello",
+  "name": "Hello YAP",
+  "entry": "main",
+  "mode": "windowed",
+  "memory": 32768,
+  "api_minor": 0,
+  "capabilities": [],
+  "associations": []
+}

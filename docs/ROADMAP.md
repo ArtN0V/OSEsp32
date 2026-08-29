@@ -49,6 +49,10 @@ checks remain before Stage 3.1 can close.
 
 ## Stage 4 — application runtime
 
+Status: **foundation in progress**. YAP1 is frozen and its streaming validator,
+host packer, Hello sample and Files metadata view are implemented. Package code
+is not executed until the Lua footprint/quota spike is completed on hardware.
+
 Build the first complete `.yap` execution path rather than only embedding Lua:
 
 - freeze the `YAP1` manifest and package reader, including API version,

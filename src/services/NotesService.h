@@ -24,6 +24,7 @@ class NotesService {
             size_t bodyCapacity);
   bool save(char* path, size_t pathCapacity, const char* title,
             const char* body);
+  bool remove(const char* path);
 
  private:
   StorageService* storage_ = nullptr;

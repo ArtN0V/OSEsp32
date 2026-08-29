@@ -159,11 +159,34 @@ moves input to the body, Enter in the body inserts a line break, and hiding the
 keyboard expands the body to the bottom of the display. Tapping either field
 shows the keyboard again.
 
+Saved-note cards have a small circular **X** in their upper-right corner.
+Deletion always asks for confirmation and is restricted to `.note` files
+directly inside `/OSEsp32/Notes`.
+
 The same component can be checked independently through **System Info →
 Keyboard Test**. Verify English and Russian text, case and symbol switching,
 Space, Enter, Backspace, cursor arrows and Show/Hide there. Its diagnostic lines
 report state, key count, geometry and heap values. The test field is explicitly
 single-line to prevent cursor-driven vertical scroll jitter.
+
+The space bar displays **English** or **Русский**. Tap it for a normal space;
+hold for about 0.3 seconds and swipe horizontally to change the keyboard
+language. The selection remains active for later text fields during the current
+session.
+
+### YAP applications — Stage 4 foundation
+
+The first Stage 4 slice recognizes `.yap` files in Files and validates the
+frozen YAP1 header, bounded section table, package/section CRCs, manifest,
+memory request, capabilities and associations without loading the whole file
+into RAM. A valid package opens a metadata page; it is not executed yet.
+
+Build the Hello sample with `tools/yap_pack.py` as documented in
+[examples/hello_yap/README.md](examples/hello_yap/README.md), then copy it to
+`/OSEsp32/Apps`. The exact format is in
+[docs/YAP1_FORMAT.md](docs/YAP1_FORMAT.md). Lua runtime candidates and the
+required target measurements are tracked in
+[docs/LUA_RUNTIME_SPIKE.md](docs/LUA_RUNTIME_SPIKE.md).
 
 ### Date, time and screen saver
 

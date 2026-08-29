@@ -24,6 +24,10 @@ uses the same service through its own textarea adapter; its old keyboard object,
 maps and callbacks are removed. Repetition, close, rotation and memory checks
 remain open.
 
+The next regression adds language switching by a guarded hold/swipe gesture on
+the space key. It must be checked for accidental spaces, accidental switches
+and correct persistence while moving between Notes fields.
+
 ### 2. Storage hardening
 
 - Canonicalize every public service path component, reject traversal, control

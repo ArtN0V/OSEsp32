@@ -19,7 +19,7 @@ const char* const ENGLISH_LOWER[] = {
     LV_SYMBOL_NEW_LINE, "\n",
     "_", "-", "z", "x", "c", "v", "b", "n", "m", ".", ",", ":",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "English", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 const char* const ENGLISH_UPPER[] = {
@@ -29,7 +29,7 @@ const char* const ENGLISH_UPPER[] = {
     LV_SYMBOL_NEW_LINE, "\n",
     "_", "-", "Z", "X", "C", "V", "B", "N", "M", ".", ",", ":",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "English", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 const char* const RUSSIAN_LOWER[] = {
@@ -39,7 +39,7 @@ const char* const RUSSIAN_LOWER[] = {
     LV_SYMBOL_NEW_LINE, "\n",
     "ё", "я", "ч", "с", "м", "и", "т", "ь", "б", "ю", ".", ",",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "Русский", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 const char* const RUSSIAN_UPPER[] = {
@@ -49,7 +49,7 @@ const char* const RUSSIAN_UPPER[] = {
     LV_SYMBOL_NEW_LINE, "\n",
     "Ё", "Я", "Ч", "С", "М", "И", "Т", "Ь", "Б", "Ю", ".", ",",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "Русский", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 const char* const SYMBOLS_ENGLISH[] = {
@@ -59,7 +59,7 @@ const char* const SYMBOLS_ENGLISH[] = {
     "\n",
     "\\", "@", "$", "(", ")", "{", "}", "[", "]", ";", "\"", "'",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "English", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 const char* const SYMBOLS_RUSSIAN[] = {
@@ -69,7 +69,7 @@ const char* const SYMBOLS_RUSSIAN[] = {
     "\n",
     "\\", "@", "$", "(", ")", "{", "}", "[", "]", ";", "\"", "'",
     "\n",
-    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
+    LV_SYMBOL_KEYBOARD, LV_SYMBOL_LEFT, "Русский", LV_SYMBOL_RIGHT, LV_SYMBOL_OK,
     ""};
 
 bool isControlKey(const char* text) {
@@ -79,6 +79,10 @@ bool isControlKey(const char* text) {
          !strcmp(text, LV_SYMBOL_NEW_LINE) ||
          !strcmp(text, LV_SYMBOL_KEYBOARD) || !strcmp(text, LV_SYMBOL_LEFT) ||
          !strcmp(text, LV_SYMBOL_RIGHT) || !strcmp(text, LV_SYMBOL_OK);
+}
+
+bool isSpaceKey(const char* text) {
+  return text && (!strcmp(text, "English") || !strcmp(text, "Русский"));
 }
 }  // namespace
 
@@ -174,7 +178,7 @@ bool SystemKeyboard::createObjects() {
                                 LV_PART_ITEMS);
   lv_obj_set_style_radius(matrix_, 2, LV_PART_ITEMS);
   if (font_) lv_obj_set_style_text_font(matrix_, font_, LV_PART_ITEMS);
-  lv_obj_add_event_cb(matrix_, matrixEvent, LV_EVENT_VALUE_CHANGED, this);
+  lv_obj_add_event_cb(matrix_, matrixEvent, LV_EVENT_ALL, this);
   return true;
 }
 
@@ -218,10 +222,15 @@ void SystemKeyboard::configureButtonControls() {
     else if (!strcmp(text, LV_SYMBOL_LEFT) ||
              !strcmp(text, LV_SYMBOL_RIGHT))
       width = 3;
-    else if (!strcmp(text, " "))
+    else if (isSpaceKey(text))
       width = 10;
     lv_buttonmatrix_set_button_width(matrix_, index, width);
-    if (isControlKey(text))
+    if (isSpaceKey(text))
+      lv_buttonmatrix_set_button_ctrl(
+          matrix_, index, static_cast<lv_buttonmatrix_ctrl_t>(
+                              LV_BUTTONMATRIX_CTRL_CLICK_TRIG |
+                              LV_BUTTONMATRIX_CTRL_NO_REPEAT));
+    else if (isControlKey(text))
       lv_buttonmatrix_set_button_ctrl(matrix_, index,
                                       LV_BUTTONMATRIX_CTRL_CHECKED);
   }
@@ -329,6 +338,8 @@ void SystemKeyboard::handleKey(const char* text) {
     hide();
   } else if (!strcmp(text, LV_SYMBOL_OK)) {
     client_->done();
+  } else if (isSpaceKey(text)) {
+    client_->insertUtf8(" ");
   } else {
     client_->insertUtf8(text);
   }
@@ -337,12 +348,67 @@ void SystemKeyboard::handleKey(const char* text) {
     client_->keyboardVisibilityChanged(true, HEIGHT);
 }
 
+void SystemKeyboard::switchLanguage(int8_t direction) {
+  language_ = language_ == KeyboardLanguage::English
+                  ? KeyboardLanguage::Russian
+                  : KeyboardLanguage::English;
+  applyLayout(language_, layout_);
+  refreshMetrics();
+  if (client_) client_->keyboardVisibilityChanged(true, HEIGHT);
+  if (logger_)
+    logger_->info("keyboard", "space swipe %s; language=%u",
+                  direction < 0 ? "left" : "right",
+                  static_cast<unsigned>(language_));
+}
+
+void SystemKeyboard::handlePointerEvent(lv_event_t* event) {
+  const lv_event_code_t code = lv_event_get_code(event);
+  lv_indev_t* input = lv_event_get_indev(event);
+  if (code == LV_EVENT_PRESSED) {
+    spaceGestureTracking_ = false;
+    spaceGestureHandled_ = false;
+    const uint32_t selected = lv_buttonmatrix_get_selected_button(matrix_);
+    if (selected == LV_BUTTONMATRIX_BUTTON_NONE || !input) return;
+    const char* text = lv_buttonmatrix_get_button_text(matrix_, selected);
+    if (!isSpaceKey(text)) return;
+    lv_indev_get_point(input, &spaceGestureStart_);
+    spaceGestureStartedMs_ = millis();
+    spaceGestureTracking_ = true;
+    return;
+  }
+  if (code == LV_EVENT_PRESSING && spaceGestureTracking_ &&
+      !spaceGestureHandled_ && input) {
+    lv_point_t point;
+    lv_indev_get_point(input, &point);
+    const int32_t distance = point.x - spaceGestureStart_.x;
+    if (millis() - spaceGestureStartedMs_ >= 300 &&
+        (distance <= -32 || distance >= 32)) {
+      spaceGestureHandled_ = true;
+      switchLanguage(distance < 0 ? -1 : 1);
+    }
+    return;
+  }
+  if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+    spaceGestureTracking_ = false;
+    spaceGestureHandled_ = false;
+  }
+}
+
 void SystemKeyboard::matrixEvent(lv_event_t* event) {
   SystemKeyboard* keyboard = static_cast<SystemKeyboard*>(
       lv_event_get_user_data(event));
   lv_obj_t* matrix = lv_event_get_target_obj(event);
   if (!keyboard || !matrix) return;
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
+      code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+    keyboard->handlePointerEvent(event);
+    return;
+  }
+  if (code != LV_EVENT_VALUE_CHANGED) return;
   const uint32_t selected = lv_buttonmatrix_get_selected_button(matrix);
   if (selected == LV_BUTTONMATRIX_BUTTON_NONE) return;
-  keyboard->handleKey(lv_buttonmatrix_get_button_text(matrix, selected));
+  const char* text = lv_buttonmatrix_get_button_text(matrix, selected);
+  if (isSpaceKey(text) && keyboard->spaceGestureHandled_) return;
+  keyboard->handleKey(text);
 }

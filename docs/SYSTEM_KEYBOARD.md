@@ -45,6 +45,14 @@ English and Russian use the same four-row geometry and one style definition.
 The first implementation has no slide animation; deterministic visibility and
 touch behavior are more important than animation.
 
+The wide space key displays the active keyboard language. A short tap inserts
+one space. Holding it for at least 300 ms and moving horizontally by at least
+32 pixels switches English/Russian without changing the interface language.
+Both directions toggle with the current two-language set; the signed direction
+is retained for a future ordered language list. The gesture disables repeat
+and suppresses the release-space event, so switching never inserts a stray
+space.
+
 ## Client contract
 
 The keyboard does not require an application to expose an LVGL object. It uses

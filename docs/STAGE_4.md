@@ -1,7 +1,9 @@
 # Roadmap Stage 4 — sandboxed YAP runtime
 
-Status: planned. No YAP parser, Lua VM, `AppStorageService` or application task
-exists in the current source tree. Stage 3.1 is a prerequisite.
+Status: foundation in progress. The frozen YAP1 parser/validator, host packer,
+Hello sample and package-information view exist. No Lua VM,
+`AppStorageService` or application task exists yet. The final Stage 3.1
+lifecycle checks remain a gate before executing third-party code.
 
 ## Goal
 
@@ -116,8 +118,10 @@ part of OSEsp32.
 ## Implementation order
 
 1. Confirm Stage 3.1 system keyboard and shared-overlay lifecycle gates.
-2. Runtime/allocator footprint spike and version freeze.
-3. YAP1 parser, validator and manifest capability model.
+2. Runtime/allocator footprint spike and version freeze. **Candidate plan
+   complete; target measurements pending.**
+3. YAP1 parser, validator and manifest capability model. **Implemented; touch
+   UI and malformed-package hardware checks pending.**
 4. Minimal Hello World in windowed mode.
 5. Lifecycle manager and exclusive shell teardown/rebuild.
 6. Instruction/time enforcement and system exit path.

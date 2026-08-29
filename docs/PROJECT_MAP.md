@@ -8,7 +8,8 @@ called out explicitly and must not be mistaken for implemented code.
 - Target: ESP32-2432S028 without PSRAM, ILI9341 320×240, XPT2046 touch.
 - Primary tool: Arduino IDE; `OSEsp32.ino` is the entry point.
 - Reproducible check: PlatformIO environment `cyd_stage3` with LVGL 9.5.0.
-- Current roadmap stage: **3.1 stabilization and system UI extraction**.
+- Current roadmap stage: **Stage 4 foundation**, while the new deletion and
+  keyboard-gesture UI still awaits its on-board regression check.
 - The custom system keyboard passed its initial on-board visibility and input
   check and now serves Notes through an adapter. Repetition, close, rotation and
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
@@ -49,7 +50,8 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/DateTimeService.*` | Software UTC clock and local offset | No RTC and no Wi-Fi source yet. |
 | `src/services/StorageService.*` | Shell SD owner and LVGL `S:` bridge | All public paths are canonicalized; replacement preserves a backup. |
 | `src/services/WallpaperService.*` | OWP1 conversion and two-strip decoder cache | Uses private LVGL decoder APIs pinned to LVGL 9.5.0. |
-| `src/services/NotesService.*` | Bounded `.note` listing/load/save | Text documents only; UI belongs elsewhere. |
+| `src/services/NotesService.*` | Bounded `.note` listing/load/save/delete | Delete accepts only direct `.note` children of `/OSEsp32/Notes`; UI belongs elsewhere. |
+| `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |
@@ -89,7 +91,7 @@ Built-in applications must stop owning shared overlay objects.
 
 | Path | Owner | Format |
 |---|---|---|
-| `/OSEsp32/Apps` | future package manager | `.yap`, not implemented yet |
+| `/OSEsp32/Apps` | YAP package validator; future runtime/package manager | Frozen `YAP1` container; validation implemented, execution pending |
 | `/OSEsp32/Data` | future application storage | per-app directories, Stage 4 |
 | `/OSEsp32/Notes` | `NotesService` | first line title, remaining UTF-8 body, `.note` |
 | `/OSEsp32/Wallpapers/desktop.owp` | `WallpaperService` | packed `OWP1`, 320×204 RGB565 |
@@ -125,7 +127,8 @@ until an RTC or future network synchronization source is added.
 - Display/touch integration: `LvglPort`.
 - Keyboard/input behavior: after Stage 3.1, only `SystemKeyboard`; applications
   submit requests and adapters.
-- YAP design: `STAGE_4.md`; no runtime code exists yet.
+- YAP format/parser: `YAP1_FORMAT.md` and `YapPackageService`; Lua runtime
+  measurements remain in `LUA_RUNTIME_SPIKE.md`.
 
 ## Verification commands
 
@@ -141,8 +144,8 @@ behavior. Hardware changes require the acceptance checklist for their stage.
 
 1. `DesktopShell.cpp` is too large and mixes window management with application
    logic. Extract system overlays first, then built-in applications gradually.
-2. The current Notes keyboard is not visible on hardware. Replace it; do not
-   add another local workaround.
+2. Note deletion and space-swipe keyboard switching compile but need an
+   on-board touch regression check.
 3. Storage is cooperative, not a separate task, despite some older target
    diagrams. A storage task is optional Stage 4 work.
 4. `WallpaperService` uses LVGL private decoder headers. LVGL upgrades require

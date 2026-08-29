@@ -28,8 +28,7 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: Stage 3.1 stabilization. The isolated system keyboard passed
-its initial on-board visibility/input check and now serves Notes through a
-textarea adapter. Validate Notes field switching, repeated show/hide, close,
-rotation and memory stability as described in `docs/SYSTEM_KEYBOARD.md`; Stage
-4 remains blocked until those checks pass.
+Current priority: validate note deletion and the space-swipe keyboard language
+gesture on hardware, while continuing the non-executing Stage 4 foundation.
+YAP1 parsing is implemented; do not execute package code until the Lua
+allocator/hook footprint spike and remaining Stage 3.1 lifecycle checks pass.
