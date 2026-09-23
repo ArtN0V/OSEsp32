@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <new>
 #include <draw/lv_image_decoder_private.h>
 #include <misc/cache/instance/lv_image_cache.h>
 
@@ -174,17 +175,31 @@ void WallpaperService::clearOptimizedFile() {
 
 void WallpaperService::invalidateCache() {
   cacheAge_ = 0;
-  for (CacheSlot& slot : cache_) {
+  if (!cache_) return;
+  for (uint8_t i = 0; i < CACHE_SLOTS; ++i) {
+    CacheSlot& slot = cache_[i];
     slot.strip = UINT16_MAX;
     slot.age = 0;
   }
 }
 
+void WallpaperService::releaseCache() {
+  // Caller has removed image objects and dropped decoder cache entries.
+  delete[] cache_;
+  cache_ = nullptr;
+  cacheAge_ = 0;
+}
+
 bool WallpaperService::loadStrip(DecodeSession& session, uint16_t strip,
                                  CacheSlot*& result) {
+  if (!cache_) {
+    cache_ = new (std::nothrow) CacheSlot[CACHE_SLOTS];
+    if (!cache_) return false;
+  }
   ++cacheAge_;
   CacheSlot* oldest = &cache_[0];
-  for (CacheSlot& slot : cache_) {
+  for (uint8_t i = 0; i < CACHE_SLOTS; ++i) {
+    CacheSlot& slot = cache_[i];
     if (slot.strip == strip) {
       slot.age = cacheAge_;
       result = &slot;

@@ -21,6 +21,7 @@ class WallpaperService {
   bool optimize(const char* sourceLvglPath, uint16_t fillColor);
   void clearOptimizedFile();
   void invalidateCache();
+  void releaseCache();
 
  private:
   struct __attribute__((packed)) Header {
@@ -48,7 +49,7 @@ class WallpaperService {
   StorageService* storage_ = nullptr;
   Logger* logger_ = nullptr;
   lv_image_decoder_t* decoder_ = nullptr;
-  CacheSlot cache_[CACHE_SLOTS];
+  CacheSlot* cache_ = nullptr;
   uint32_t cacheAge_ = 0;
 
   static bool validHeader(const Header& header);

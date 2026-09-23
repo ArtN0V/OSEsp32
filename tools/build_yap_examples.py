@@ -21,7 +21,11 @@ def main() -> None:
     output = ROOT / "build"
     for filename, source in EXAMPLES.items():
         yap_pack.pack(MANIFEST, source, output / filename)
-    print(f"built {len(EXAMPLES)} packages in {output}")
+    for mode in ("windowed", "fullscreen", "exclusive"):
+        yap_pack.pack(ROOT / "examples/lifecycle_yap" / f"{mode}.json",
+                      ROOT / "examples/lifecycle_yap/main.lua",
+                      output / f"lifecycle_{mode}.yap")
+    print(f"built {len(EXAMPLES) + 3} packages in {output}")
 
 
 if __name__ == "__main__":

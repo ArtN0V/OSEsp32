@@ -28,7 +28,9 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: physically verify the first short-lived YAP execution slice,
-especially allocator/hook failures and repeated teardown. Do not add persistent
-Lua callbacks, unrestricted SD access, fullscreen or exclusive launch until
-their Stage 4 lifecycle and capability boundaries are implemented.
+Current priority: physically verify lifecycle demos in all three launch modes,
+especially EXIT, exclusive wallpaper/keyboard restoration and repeated heap
+baselines. AppLifecycle and coroutine scheduling exist; next implement bounded
+application storage. Keep Lua UI callbacks and arbitrary file paths unavailable
+until their ownership/capability boundaries exist. Run tools/test_yap_runtime.py
+after runtime changes; it tests actual Lua with ASan/UBSan on the host.

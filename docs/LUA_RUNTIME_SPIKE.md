@@ -22,9 +22,12 @@ no-PSRAM budget; package API v1 does not expose Lua-version-specific behavior.
   programs.
 - Use `lua_newstate` with an OSEsp32 allocator that stores current/peak bytes
   and refuses allocations above the manifest quota.
-- Open only the constrained base, coroutine, table, string, math and UTF-8
+- Open only the constrained base, table, string, math and UTF-8
   libraries. Do not expose `io`, `os`, `package`, `debug`, dynamic loading or
   precompiled bytecode.
+- Coroutine creation/resume belongs to the host; the Lua coroutine library
+  is not exposed. Metatable mutation, table.sort and string pattern operations
+  are also unavailable pending bounded implementations.
 - Install an instruction hook before application code runs.
 - Run source from a validated `LUAS` package section and call the manifest's
   entry function.
@@ -51,15 +54,27 @@ no-PSRAM budget; package API v1 does not expose Lua-version-specific behavior.
 | Heap after 100 closes | pending | pending |
 | Hook/allocator failure returns cleanly | pending | pending |
 
-The clean firmware build uses 943,289 bytes of flash (51.4% of the 1,835,008
+The first execution-slice build used 943,289 bytes of flash (51.4% of the 1,835,008
 byte application partition) and 111,108 bytes of static RAM (33.9%). The prior
 build used 827,153 bytes of flash and 110,944 bytes of static RAM. Dynamic heap
 values are intentionally left pending until read from the physical result
 screen.
 
-The current runtime executes only self-terminating source applications. It
-streams the verified `LUAS` section in 256-byte chunks, allows 16–96 KiB of Lua
-heap as requested by the manifest, applies a 200,000-instruction and 250 ms
-limit, and calls `lua_close` before any result UI is created. The only OSEsp32
-API is `osesp32.ui.label(text)`; it copies at most 96 bytes and exposes no LVGL,
-SD or native pointer.
+The lifecycle build (2026-09-18) uses 944,745 flash bytes and 86,740 static RAM
+bytes. Wallpaper strips moved from permanent storage to a lazy allocation,
+so a desktop with wallpaper still needs about 25 KiB of dynamic cache. This
+cache is released for exclusive execution.
+
+The current runtime streams verified source in 256-byte chunks, runs one
+host-owned coroutine and yields at 1,000-instruction intervals. A burst between
+explicit waits is limited to 200,000 instructions / 250 ms active execution;
+these are not a wall-clock deadline for compilation or native C routines.
+`osesp32.sleep(1..60000)` allows long-lived apps and resets the burst budget on
+wake. `osesp32.ui.label(text)` copies at most 96 bytes. Neither API exposes
+LVGL, SD or native pointers. EXIT and detected SD removal close the entire VM.
+
+`python3 tools/test_yap_runtime.py` passed real-runtime host tests with
+ASan/UBSan: 100 Hello runs, quota rejection, a loop inside pcall, syntax error,
+missing entry, timed sleep including clock wrap, cancellation, simulated SD
+removal/short reads and lifecycle transitions. Actual
+ESP32 heap and screen restoration still require the lifecycle hardware guide.

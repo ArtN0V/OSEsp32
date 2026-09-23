@@ -8,7 +8,7 @@ called out explicitly and must not be mistaken for implemented code.
 - Target: ESP32-2432S028 without PSRAM, ILI9341 320×240, XPT2046 touch.
 - Primary tool: Arduino IDE; `OSEsp32.ino` is the entry point.
 - Reproducible check: PlatformIO environment `cyd_stage3` with LVGL 9.5.0.
-- Current roadmap stage: **Stage 4 first execution slice**. Note deletion,
+- Current roadmap stage: **Stage 4 lifecycle and exclusive restore**. Note deletion,
   system keyboard and its language gesture have passed the reported on-board
   functional check; repeated memory checks remain open.
 - The custom system keyboard passed its initial on-board visibility and input
@@ -53,7 +53,8 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/WallpaperService.*` | OWP1 conversion and two-strip decoder cache | Uses private LVGL decoder APIs pinned to LVGL 9.5.0. |
 | `src/services/NotesService.*` | Bounded `.note` listing/load/save/delete | Delete accepts only direct `.note` children of `/OSEsp32/Notes`; UI belongs elsewhere. |
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
-| `src/runtime/YapRuntimeService.*` | One short-lived, quota-limited Lua VM and safe API registration | Streams verified source, enforces instruction/time limits and closes the whole state before returning. |
+| `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM with host-owned coroutine | start/update/stop; count-hook yields, sleep and complete teardown; no LVGL ownership. |
+| `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/vendor/lua549/*` | Pinned official Lua 5.4.9 core and selected safe libraries | Reproducibly installed by `tools/install_lua.py`; 32-bit number configuration. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
@@ -81,7 +82,8 @@ Built-in applications must stop owning shared overlay objects.
 
 - No PSRAM is assumed.
 - LVGL renders with two `320×20` RGB565 partial buffers: about 25 KiB total.
-- OWP wallpaper keeps two additional `320×20` RGB565 strips: about 25 KiB.
+- OWP wallpaper lazily allocates two `320×20` RGB565 strips: about 25 KiB,
+  released on exclusive launch and allocated again when wallpaper is drawn.
 - Notes holds at most 24 summaries plus one bounded title/body edit buffer.
 - Starfield state is allocated only while that saver is visible.
 - Full-screen framebuffers and general virtual memory/swap are prohibited.
@@ -94,7 +96,7 @@ Built-in applications must stop owning shared overlay objects.
 
 | Path | Owner | Format |
 |---|---|---|
-| `/OSEsp32/Apps` | YAP validator and runtime | Frozen `YAP1`; short-lived windowed source execution implemented |
+| `/OSEsp32/Apps` | YAP validator and runtime | Frozen `YAP1`; windowed/fullscreen/exclusive coroutine execution |
 | `/OSEsp32/Data` | future application storage | per-app directories, Stage 4 |
 | `/OSEsp32/Notes` | `NotesService` | first line title, remaining UTF-8 body, `.note` |
 | `/OSEsp32/Wallpapers/desktop.owp` | `WallpaperService` | packed `OWP1`, 320×204 RGB565 |
@@ -138,10 +140,15 @@ until an RTC or future network synchronization source is added.
 ```text
 PYTHONPATH=/tmp/yellowos-platformio python3 -m platformio run --environment cyd_stage3
 git diff --check
+python3 tools/test_yap_runtime.py
+python3 tools/build_yap_examples.py
 ```
 
 Compilation proves API and memory-layout compatibility, not touch/display
 behavior. Hardware changes require the acceptance checklist for their stage.
+The runtime host test compiles the actual C++ service plus vendored Lua with
+ASan/UBSan and stubbed board/storage interfaces. Its synthetic heap counters
+must not be quoted as ESP32 memory measurements.
 
 ## Known debt and gates
 

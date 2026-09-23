@@ -20,6 +20,7 @@ enum class YapRuntimeStatus : uint8_t {
   EntryMissing,
   ExecutionError,
   LimitExceeded,
+  Cancelled,
 };
 
 struct YapRuntimeResult {
@@ -47,8 +48,11 @@ class YapRuntimeService {
     storage_ = &storage;
     logger_ = &logger;
   }
-  YapRuntimeStatus run(const YapPackageInfo& package,
-                       YapRuntimeResult& result);
+  bool start(const YapPackageInfo& package);
+  void update();
+  void stop(YapRuntimeStatus reason = YapRuntimeStatus::Cancelled);
+  bool running() const { return running_; }
+  const YapRuntimeResult& result() const { return result_; }
   static const char* statusCode(YapRuntimeStatus status);
 
  private:
@@ -71,10 +75,23 @@ class YapRuntimeService {
   StorageService* storage_ = nullptr;
   Logger* logger_ = nullptr;
   YapRuntimeResult* activeResult_ = nullptr;
-  uint32_t deadlineMs_ = 0;
   uint32_t hookInstructions_ = 0;
-  bool limitExceeded_ = false;
   bool running_ = false;
+  lua_State* state_ = nullptr;
+  lua_State* worker_ = nullptr;
+  AllocationState allocation_;
+  YapRuntimeResult result_;
+  const YapPackageInfo* loadingPackage_ = nullptr;
+  char entry_[25] = {};
+  bool entryStarted_ = false;
+  bool sleeping_ = false;
+  uint32_t wakeMs_ = 0;
+  uint32_t startedMs_ = 0;
+  uint32_t busyMs_ = 0;
+  uint32_t burstInstructions_ = 0;
+  static int prepare(lua_State* state);
+  static int sleep(lua_State* state);
+  void finish(YapRuntimeStatus status);
 
   static void* allocate(void* userData, void* pointer, size_t oldSize,
                         size_t newSize);

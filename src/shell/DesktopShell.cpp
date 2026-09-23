@@ -129,9 +129,15 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
 
 void DesktopShell::update() {
   port_.update();
+  storage_.update();
+  if (yapLifecycle_.active()) {
+    updateYapSession();
+    delay(2);
+    return;
+  }
   processPendingNoteDelete();
   processPendingYapRun();
-  storage_.update();
+  if (yapLifecycle_.active()) return;
   if (storage_.mounted() != previousStorageMounted_) {
     previousStorageMounted_ = storage_.mounted();
     wallpaperService_.invalidateCache();
@@ -635,8 +641,8 @@ void DesktopShell::processPendingYapRun() {
   if (!yapRunRequested_) return;
   yapRunRequested_ = false;
 
-  YapPackageInfo package;
-  const YapError error = yapPackages_.inspect(selectedYapPath_, package);
+  if (yapLifecycle_.active() || calibration_.active() || noteEditorOpen_) return;
+  const YapError error = yapPackages_.inspect(selectedYapPath_, runningPackage_);
   if (error != YapError::None) {
     char message[150];
     snprintf(message, sizeof(message),
@@ -647,16 +653,138 @@ void DesktopShell::processPendingYapRun() {
     return;
   }
 
-  systemKeyboard_.hide();
-  setTaskText(tr("Running YAP application...", "Запуск приложения YAP..."));
-  YapRuntimeResult result;
-  yapRuntime_.run(package, result);
-  showYapRuntimeResult(package, result);
+  yapHeapBeforePrepare_ = ESP.getFreeHeap();
+  yapBlockBeforePrepare_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  lastYapResult_ = {};
+  yapLifecycle_.begin();
+}
+
+void DesktopShell::prepareYapView() {
+  hideScreenSaver();
+  closeWindow();
+  lv_obj_add_flag(startMenu_, LV_OBJ_FLAG_HIDDEN);
+  systemKeyboard_.shutdown();
+  const YapLaunchMode mode = runningPackage_.manifest.launchMode;
+  if (mode == YapLaunchMode::Exclusive) {
+    removeWallpaper();
+    lv_image_cache_drop(nullptr);
+    wallpaperService_.releaseCache();
+    lv_obj_clean(screen_);
+    taskLabel_ = clockLabel_ = startMenu_ = nullptr;
+    desktopReleased_ = true;
+  }
+  setFullscreenApplicationActive(mode != YapLaunchMode::Windowed);
+  // OS-owned full-screen input shield: desktop controls cannot receive taps
+  // while an app owns the foreground. Lua never sees these object pointers.
+  yapOverlay_ = lv_obj_create(lv_layer_top());
+  configurePanel(yapOverlay_, 0x17212B);
+  lv_obj_set_style_text_font(yapOverlay_, uiFont(), 0);
+  lv_obj_set_size(yapOverlay_, 320, 240);
+  lv_obj_set_style_bg_opa(yapOverlay_,
+      mode == YapLaunchMode::Windowed ? LV_OPA_TRANSP : LV_OPA_COVER, 0);
+  lv_obj_t* panel = lv_obj_create(yapOverlay_);
+  configurePanel(panel, COLOR_WINDOW, 3);
+  const bool windowed = mode == YapLaunchMode::Windowed;
+  lv_obj_set_pos(panel, windowed ? 5 : 0, windowed ? 5 : 0);
+  lv_obj_set_size(panel, windowed ? 310 : 320, windowed ? 196 : 240);
+  lv_obj_t* title = lv_label_create(panel);
+  lv_obj_set_pos(title, 8, 9);
+  lv_obj_set_width(title, 206);
+  lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+  lv_label_set_text(title, runningPackage_.manifest.name);
+  lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
+  createButton(panel, tr("EXIT", "ВЫХОД"), windowed ? 226 : 236,
+               3, 76, 30, yapExitEvent);
+  yapOutput_ = lv_label_create(panel);
+  lv_obj_set_pos(yapOutput_, 10, 48);
+  lv_obj_set_width(yapOutput_, 286);
+  lv_obj_set_style_text_color(yapOutput_, lv_color_hex(0x202020), 0);
+  lv_label_set_text(yapOutput_, tr("Starting...", "Запуск..."));
+  yapHeapPrepared_ = ESP.getFreeHeap();
+  yapBlockPrepared_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+}
+
+void DesktopShell::updateYapSession() {
+  using State = AppLifecycle::State;
+  switch (yapLifecycle_.state()) {
+    case State::Idle: return;
+    case State::Preparing: {
+      prepareYapView();
+      // Reserve native UI/driver space outside the manifest's Lua budget.
+      const uint32_t reserve = 24 * 1024;
+      if (yapHeapPrepared_ < runningPackage_.manifest.requestedMemory + reserve ||
+          yapBlockPrepared_ < 12 * 1024) {
+        lastYapResult_.status = YapRuntimeStatus::OutOfMemory;
+        lastYapResult_.quotaBytes = runningPackage_.manifest.requestedMemory;
+        lastYapResult_.freeHeapBefore = lastYapResult_.freeHeapAfter = yapHeapPrepared_;
+        lastYapResult_.largestBlockBefore = lastYapResult_.largestBlockAfter = yapBlockPrepared_;
+        strlcpy(lastYapResult_.error, "Not enough memory to start safely",
+                sizeof(lastYapResult_.error));
+        yapLifecycle_.prepared(false);
+      } else {
+        const bool started = yapRuntime_.start(runningPackage_);
+        lastYapResult_ = yapRuntime_.result();
+        yapLifecycle_.prepared(started);
+      }
+      break;
+    }
+    case State::Running:
+      if (yapLifecycle_.exitRequested()) {
+        yapRuntime_.stop();
+      } else if (!storage_.mounted()) {
+        yapRuntime_.stop(YapRuntimeStatus::IoError);
+      } else {
+        yapRuntime_.update();
+      }
+      lastYapResult_ = yapRuntime_.result();
+      if (yapOutput_ && strcmp(lv_label_get_text(yapOutput_), lastYapResult_.label))
+        lv_label_set_text(yapOutput_, lastYapResult_.label);
+      if (!yapRuntime_.running()) yapLifecycle_.stop();
+      break;
+    case State::Stopping:
+      if (yapRuntime_.running()) {
+        yapRuntime_.stop();
+        lastYapResult_ = yapRuntime_.result();
+      }
+      if (yapOverlay_) lv_obj_delete(yapOverlay_);
+      yapOverlay_ = yapOutput_ = nullptr;
+      yapLifecycle_.stopped();
+      break;
+    case State::RestoringShell:
+      restoreYapDesktop();
+      yapLifecycle_.restored();
+      showYapRuntimeResult(runningPackage_, lastYapResult_);
+      break;
+  }
+}
+
+void DesktopShell::restoreYapDesktop() {
+  setFullscreenApplicationActive(false);
+  systemKeyboard_.begin(lv_layer_top(), uiSmallFont(), kernel_->logger());
+  lastClockSecond_ = UINT32_MAX;
+  if (desktopReleased_) {
+    buildDesktop();
+    desktopReleased_ = false;
+  } else if (previousStorageMounted_ != storage_.mounted()) {
+    applyWallpaper();
+  }
+  previousStorageMounted_ = storage_.mounted();
+  updateClock();
+  kernel_->logger().info("yap-lifecycle",
+      "heap %lu -> prepared %lu -> restored %lu; block %lu -> %lu -> %lu",
+      static_cast<unsigned long>(yapHeapBeforePrepare_),
+      static_cast<unsigned long>(yapHeapPrepared_),
+      static_cast<unsigned long>(ESP.getFreeHeap()),
+      static_cast<unsigned long>(yapBlockBeforePrepare_),
+      static_cast<unsigned long>(yapBlockPrepared_),
+      static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
 }
 
 void DesktopShell::showYapRuntimeResult(const YapPackageInfo& package,
                                         const YapRuntimeResult& result) {
   lv_obj_t* content = createWindow(package.manifest.name);
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
   const bool success = result.status == YapRuntimeStatus::Success;
 
   lv_obj_t* heading = lv_label_create(content);
@@ -678,12 +806,14 @@ void DesktopShell::showYapRuntimeResult(const YapPackageInfo& package,
   lv_label_set_text(output, outputText);
   lv_obj_set_pos(output, 10, 34);
   lv_obj_set_width(output, 288);
+  lv_obj_set_height(output, 40);
+  lv_label_set_long_mode(output, LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_font(output, uiSmallFont(), 0);
 
-  char metrics[190];
+  char metrics[384];
   snprintf(metrics, sizeof(metrics),
-           tr("Status: %s   Time: %lu ms\nLua peak: %lu/%lu KiB   after close: %lu B\nHeap: %lu -> %lu   largest: %lu -> %lu",
-              "Статус: %s   Время: %lu мс\nПик Lua: %lu/%lu КиБ   после закрытия: %lu Б\nКуча: %lu -> %lu   блок: %lu -> %lu"),
+           tr("Status: %s   Time: %lu ms\nLua peak: %lu/%lu KiB\nAfter close: %lu B\nVM heap: %lu -> %lu\nVM block: %lu -> %lu",
+              "Статус: %s   Время: %lu мс\nПик Lua: %lu/%lu КиБ\nПосле закрытия: %lu Б\nКуча VM: %lu -> %lu\nБлок VM: %lu -> %lu"),
            YapRuntimeService::statusCode(result.status),
            static_cast<unsigned long>(result.elapsedMs),
            static_cast<unsigned long>(result.peakLuaBytes / 1024),
@@ -700,7 +830,21 @@ void DesktopShell::showYapRuntimeResult(const YapPackageInfo& package,
   lv_obj_set_style_text_font(diagnostics, uiSmallFont(), 0);
   lv_obj_set_style_text_color(diagnostics, lv_color_hex(0x555555), 0);
 
-  createButton(content, tr("RUN AGAIN", "ЕЩЁ РАЗ"), 185, 128, 113, 28,
+  char lifecycle[220];
+  snprintf(lifecycle, sizeof(lifecycle),
+      tr("Mode: %s\nShell heap: %lu -> %lu\nPrepared heap: %lu\nPrepared block: %lu",
+         "Режим: %s\nКуча ОС: %lu -> %lu\nПеред VM: %lu\nБлок перед VM: %lu"),
+      YapPackageService::launchModeName(package.manifest.launchMode),
+      static_cast<unsigned long>(yapHeapBeforePrepare_),
+      static_cast<unsigned long>(ESP.getFreeHeap()),
+      static_cast<unsigned long>(yapHeapPrepared_),
+      static_cast<unsigned long>(yapBlockPrepared_));
+  lv_obj_t* lifecycleLabel = lv_label_create(content);
+  lv_label_set_text(lifecycleLabel, lifecycle);
+  lv_obj_set_pos(lifecycleLabel, 10, 190);
+  lv_obj_set_width(lifecycleLabel, 288);
+  lv_obj_set_style_text_font(lifecycleLabel, uiSmallFont(), 0);
+  createButton(content, tr("RUN AGAIN", "ЕЩЁ РАЗ"), 185, 268, 113, 28,
                yapRunEvent);
 }
 
@@ -1995,8 +2139,12 @@ void DesktopShell::fileEntryEvent(lv_event_t* event) {
 }
 
 void DesktopShell::yapRunEvent(lv_event_t*) {
-  if (!active_ || !active_->selectedYapPath_[0]) return;
+  if (!active_ || !active_->selectedYapPath_[0] || active_->yapLifecycle_.active()) return;
   active_->yapRunRequested_ = true;
+}
+
+void DesktopShell::yapExitEvent(lv_event_t*) {
+  if (active_) active_->yapLifecycle_.requestExit();
 }
 
 void DesktopShell::filesUpEvent(lv_event_t*) {

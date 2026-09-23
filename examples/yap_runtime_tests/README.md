@@ -7,7 +7,7 @@ Expected result after pressing **RUN**:
 
 | Package | Expected status |
 |---|---|
-| `test_infinite_loop.yap` | `limit_exceeded` within about 250 ms |
+| `test_infinite_loop.yap` | `limit_exceeded` after at most 200 instruction slices |
 | `test_out_of_memory.yap` | `out_of_memory` |
 | `test_syntax_error.yap` | `compile_error` |
 | `test_missing_entry.yap` | `entry_missing` |

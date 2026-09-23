@@ -6,8 +6,8 @@ IDE sketch while keeping the implementation in modular C++ files.
 
 Stages 0–2 established the hardware, platform foundation and graphical shell;
 most Stage 3 storage and personalization work is present. Development is now
-on **Stage 4: application runtime**; the first constrained, self-terminating
-YAP execution path is implemented. The normal boot opens the LVGL desktop; the
+on **Stage 4: application runtime**; cooperative YAP execution and the three
+launch modes are implemented. The normal boot opens the LVGL desktop; the
 proven diagnostic UI remains available as a recovery mode.
 
 ## Current capabilities
@@ -181,8 +181,9 @@ session.
 
 The first Stage 4 execution slice recognizes `.yap` files in Files, validates
 the frozen YAP1 container without loading it all into RAM, and can run its Lua
-source inside the requested 16–96 KiB quota. A 200,000-instruction/250 ms guard
-stops runaway code. The VM is always closed before OSEsp32 draws the result
+source inside the requested 16–96 KiB quota. A guard limits each burst between
+explicit waits to 200,000 instructions or 250 ms of active execution. Lua
+yields to the UI every 1,000 instructions. The VM closes before the result
 window, which shows peak Lua memory and before/after heap diagnostics.
 
 Build the Hello sample with `tools/yap_pack.py` as documented in
@@ -197,9 +198,17 @@ Run `python tools/build_yap_examples.py` to create Hello plus controlled
 compile-error, missing-entry, out-of-memory and infinite-loop packages. Their
 expected results are documented in
 [examples/yap_runtime_tests/README.md](examples/yap_runtime_tests/README.md).
-The current application API contains only `osesp32.ui.label(text)`; application
-file access, persistent events and fullscreen/exclusive launch are not present
-yet.
+The current application API provides `osesp32.ui.label(text)` and
+`osesp32.sleep(milliseconds)`. The latter keeps touch/display processing alive
+while the app waits. Application file access and UI event callbacks are planned.
+
+The same build command also creates `lifecycle_windowed.yap`,
+`lifecycle_fullscreen.yap` and `lifecycle_exclusive.yap`. They show a counter
+until **EXIT** is pressed. Exclusive mode releases desktop objects, the
+keyboard and wallpaper cache, then rebuilds the desktop on return. Settings,
+calibration and the current file-manager path are retained. The scrollable
+result page includes memory metrics and **RUN AGAIN**. See
+[the lifecycle test guide](examples/lifecycle_yap/README.md).
 
 ### Date, time and screen saver
 

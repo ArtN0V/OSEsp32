@@ -2,9 +2,10 @@
 
 Status: first execution slice implemented. The frozen YAP1 parser/validator,
 host packer and package-information view now feed a constrained Lua 5.4.9 VM.
-Windowed Hello and controlled failure examples exist. `AppStorageService`,
-persistent event-driven applications and exclusive lifecycle restoration do
-not exist yet; the target-board runtime checks below remain mandatory.
+Hello, controlled failures and three cooperative lifecycle demos exist.
+Windowed/fullscreen/exclusive preparation, system EXIT and restoration are
+implemented; `AppStorageService` and UI event callbacks remain planned. The
+target-board runtime checks below remain mandatory.
 
 ## Goal
 
@@ -126,9 +127,13 @@ part of OSEsp32.
 4. Minimal self-terminating Hello World in windowed mode. **Implemented with
    streamed source, allocator quota, instruction/time limits and teardown
    diagnostics; physical checks pending.**
-5. Lifecycle manager and exclusive shell teardown/rebuild.
-6. Instruction/time enforcement and system exit path. **Synchronous execution
-   enforcement implemented; persistent-app exit overlay remains.**
+5. Lifecycle manager and exclusive shell teardown/rebuild. **Implemented;
+   dynamic wallpaper release, keyboard teardown and restore need board checks.**
+6. Instruction/time enforcement and system exit path. **Implemented with a
+   host-owned coroutine, 1,000-instruction yields and an EXIT overlay. The
+   200,000-instruction/250 ms active-execution budget resets after explicit
+   sleep; UI/wait time is excluded. Source compilation/native C calls are
+   synchronous, not hard real-time preemptible.**
 7. `app:/` and `data:/` storage with fixed handle table.
 8. Shell-owned Open/Save dialogs and exact-file capabilities.
 9. Transactional save/recovery and SD-removal pause flow.

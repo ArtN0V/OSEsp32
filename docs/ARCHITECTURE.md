@@ -2,8 +2,8 @@
 
 This document contains current decisions and planned Stage 4 boundaries. For
 the exact source that exists today, start with `PROJECT_MAP.md`.
-`YapRuntimeService` now exists; `AppStorageService`, persistent application
-sessions and separate application/network tasks remain plans.
+`YapRuntimeService` and `AppLifecycle` now exist. `AppStorageService`, UI event
+callbacks and separate application/network tasks remain plans.
 
 ## Product boundary
 
@@ -101,11 +101,19 @@ validates the fixed manifest. `YapRuntimeService` then streams only the verified
 the manifest entry and destroys the state. Runtime measurements and remaining
 hardware gates are defined in `LUA_RUNTIME_SPIKE.md`.
 
-This first slice is deliberately self-terminating: Lua cannot retain callbacks
-or LVGL objects. `osesp32.ui.label(text)` copies one bounded command result,
-and the shell creates its own LVGL result window only after `lua_close`. This
-keeps native UI ownership outside the VM until a bounded event queue and full
-application lifecycle manager exist.
+The host owns one coroutine, resumed from the UI loop. Every 1,000 Lua
+instructions the count hook yields; quotas are checked outside Lua so `pcall`
+cannot swallow termination. `osesp32.sleep(1..60000)` yields until a deadline,
+allowing long-lived cooperative apps. `osesp32.ui.label(text)` copies up to 96
+bytes to a system-owned label; no LVGL pointers or UI callbacks reach Lua.
+The OS-owned EXIT button enqueues cancellation. No LVGL object is deleted
+inside its own event callback.
+
+App-created coroutines, metatable manipulation, table.sort and string pattern
+operations are not exposed in this slice. These would permit uncontrolled
+execution during teardown or non-yieldable native callbacks. Loading source
+and native library operations remain synchronous; the hook is not a hard
+real-time preemptor for C code.
 
 ## Threading model
 
@@ -128,6 +136,15 @@ Stage 4; it must request storage work through the service instead of touching
 
 ## Application lifecycle and memory reclamation
 
+Implemented by `AppLifecycle` and `DesktopShell::updateYapSession`:
+`Idle → Preparing → Running → Stopping → RestoringShell → Idle`.
+Each phase advances from the main loop. Errors and EXIT take the same teardown
+path. The three manifest modes are honored; insufficient memory rejects launch
+instead of silently changing the mode. Before VM creation, the host requires
+the requested quota plus 24 KiB free reserve and a 12 KiB largest free block.
+This is an admission check, not a guarantee against subsequent allocation
+failure; the allocator still enforces the hard Lua quota.
+
 - `windowed` keeps the shell and is intended for small utilities.
 - `fullscreen` covers the desktop but may retain its objects and caches.
 - `exclusive` saves only a compact shell state, closes shell-owned files,
@@ -144,6 +161,14 @@ Stage 4; it must request storage work through the service instead of touching
 - The shell is reconstructed, not serialized into RAM. This deliberately
   trades a short return delay for a larger contiguous block while an exclusive
   application is running.
+
+The current exclusive implementation releases desktop objects, the keyboard
+tree, decoder cache entries and dynamically allocated wallpaper strips. Fixed
+Notes/File-service buffers, LVGL partial buffers and kernel state stay resident.
+File-manager path/page remain in the shell; settings remain in NVS. On restore,
+the desktop is rebuilt, then a scrollable execution report opens. A normal
+return, error, detected SD removal and EXIT all close the VM. Retry/Close for
+unsaved app documents is deferred until application file APIs exist.
 
 General virtual memory is out of scope. ESP32 pointers cannot transparently
 address SD data, and random swap traffic would be slow and fragile. Large data

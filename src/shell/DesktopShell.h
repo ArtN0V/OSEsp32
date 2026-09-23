@@ -14,6 +14,7 @@
 #include "../services/WallpaperService.h"
 #include "../services/YapPackageService.h"
 #include "../runtime/YapRuntimeService.h"
+#include "../runtime/AppLifecycle.h"
 #include "../ui/LvglPort.h"
 #include "../ui/OSEsp32Font.h"
 #include "../ui/SystemKeyboard.h"
@@ -58,6 +59,16 @@ class DesktopShell {
   WallpaperService wallpaperService_;
   YapPackageService yapPackages_;
   YapRuntimeService yapRuntime_;
+  AppLifecycle yapLifecycle_;
+  YapPackageInfo runningPackage_;
+  YapRuntimeResult lastYapResult_;
+  lv_obj_t* yapOverlay_ = nullptr;
+  lv_obj_t* yapOutput_ = nullptr;
+  bool desktopReleased_ = false;
+  uint32_t yapHeapBeforePrepare_ = 0;
+  uint32_t yapBlockBeforePrepare_ = 0;
+  uint32_t yapHeapPrepared_ = 0;
+  uint32_t yapBlockPrepared_ = 0;
   LvglPort port_;
   TouchCalibrationService calibration_;
   SystemKeyboard systemKeyboard_;
@@ -154,6 +165,9 @@ class DesktopShell {
   void openImage(const char* path);
   void openYapPackage(const char* path);
   void processPendingYapRun();
+  void updateYapSession();
+  void prepareYapView();
+  void restoreYapDesktop();
   void showYapRuntimeResult(const YapPackageInfo& package,
                             const YapRuntimeResult& result);
   void openSettings();
@@ -239,6 +253,7 @@ class DesktopShell {
   static void cancelDialogEvent(lv_event_t* event);
   static void fileEntryEvent(lv_event_t* event);
   static void yapRunEvent(lv_event_t* event);
+  static void yapExitEvent(lv_event_t* event);
   static void filesUpEvent(lv_event_t* event);
   static void filesPreviousEvent(lv_event_t* event);
   static void filesNextEvent(lv_event_t* event);
