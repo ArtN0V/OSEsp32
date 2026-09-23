@@ -94,16 +94,43 @@ objects must remain in real RAM. See [STAGE_4.md](STAGE_4.md).
 
 ## Stage 5 — desktop SDK
 
-Create templates, a `.yap` packer, simulator-oriented APIs and example apps:
-calculator, notes, Paint and a port of the existing game. Paint is the storage
-and memory stress reference: shell-owned Open/Save dialogs, BMP import/export,
-atomic replacement, SD-removal recovery and a native canvas that never exposes
-pixels as Lua tables. Start with a measured exclusive RGB565 or indexed canvas;
-add a tiled SD-backed canvas only if the RAM version cannot meet the budget.
-Extend the Stage 4 **Open with** registry for installation/uninstallation and
-larger libraries; BMP already supports Viewer and third-party candidates.
-Extend the built-in image viewer with scaling and optional PNG support only if
-memory tests permit it.
+Status: **Work package 1 implemented; template hardware check pending**. Basic `file_roundtrip.yap`
+and `document_info.yap` operation has been reported on the target board. The
+remaining Stage 4 SD-removal, transaction interruption and long endurance
+checks stay open and are not silently waived by starting SDK work.
+
+1. Provide a cross-platform project template and one-command `new`, `check`,
+   `build` and `inspect` workflow with deterministic output and actionable
+   permission/resource summaries. **Implemented and host-tested; generated
+   `sdk_template.yap` still needs one target-board launch.**
+2. Freeze an additive API 1.2 UI object model: bounded labels, buttons, toggle,
+   list and text fields; stable integer IDs; scrolling; confirmation dialogs;
+   queued tap/hold/swipe/timer events. Lua never receives LVGL objects.
+3. Measure a system-owned native Canvas in exclusive mode. Compare RGB565,
+   indexed 8-bit and indexed 4-bit storage using both free heap and largest
+   block. Redraw only dirty rectangles. Do not add a second full-screen buffer
+   or represent pixels as Lua tables.
+4. Implement Paint as the storage/memory reference: incremental BMP 16/24/32
+   import, interoperable 24-bit BMP export, pencil/eraser/colors, dirty-state
+   confirmation, Open/Save/replace and SD-removal recovery.
+5. Ship reference YAP applications: Calculator, Notes, Paint, file viewer and a
+   port of the existing game. The built-in Notes remains the recovery editor;
+   YAP Notes documents the public SDK rather than replacing it immediately.
+6. Add icons/desktop shortcuts, application information/permissions,
+   uninstall with separate keep/remove-data choice, stale-association cleanup
+   and an installer-maintained registry when the current bounded scan is no
+   longer sufficient.
+7. Add developer diagnostics and a host runner for non-visual Lua/business
+   logic. It must emulate stable API results and errors, not pretend that host
+   timing/memory proves ESP32 behavior.
+8. Accept the stage only after old API 1.0/1.1 packages still work, all reference
+   apps run from SD, Paint safely round-trips BMP, the game remains responsive,
+   removal/exit restores the shell, and 100 mixed launches show stable heap and
+   largest-block baselines.
+
+Paint and Canvas details, SDK gates and physical checks live in
+[STAGE_5.md](STAGE_5.md). Optional image scaling/PNG follows only after the
+Canvas/runtime measurements leave a safe no-PSRAM margin.
 
 ## Stage 6 — stabilization
 

@@ -229,6 +229,29 @@ removal an active YAP pauses and displays **Retry / Close app**. Retry validates
 the package again, repairs known transactions and issues a new handle session;
 old handles and grants never become valid again.
 
+### Creating a YAP project — Stage 5 SDK
+
+The high-level SDK command works the same way in PowerShell and Bash. It treats
+`.lua` as source input; Windows does not need a file association for Lua:
+
+```text
+python tools/yap.py new my_first_app --id org.example.myfirst --name "My First App"
+python tools/yap.py check my_first_app
+python tools/yap.py build my_first_app
+python tools/yap.py inspect my_first_app/build/my_first_app.yap
+```
+
+Python 3.10 or newer is recommended. If Windows maps `python` to the Microsoft
+Store instead of an installed interpreter, use the same commands with `py -3`
+in place of `python`.
+
+`new` refuses to touch an existing path. `check` builds into a temporary
+directory and prints API, launch mode, memory quota, capabilities, associations,
+resources and sizes. `build` produces a deterministic package under the
+project's `build` directory. The starter uses a packaged resource, two queued
+buttons and app-controlled exit. See [Stage 5](docs/STAGE_5.md) and the
+[YAP API](docs/YAP_API.md).
+
 ### Date, time and screen saver
 
 **Settings → Date & time** currently sets the clock and UTC offset manually.
@@ -293,6 +316,7 @@ docs/STAGE_2.md           graphical-shell plan and acceptance checks
 docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
+docs/STAGE_5.md           SDK, UI API, Canvas, Paint and reference-app gates
 docs/YAP_API.md           callable YAP 1.1 API, limits and failure semantics
 ```
 

@@ -6,6 +6,11 @@ save/recovery, SD Retry/Close and file associations are implemented. The public
 contract is in `YAP_API.md`; limits and audit results are in `AUDIT.md`.
 Host tests/builds are not substitutes for the hardware checks below.
 
+Reported board checkpoint: `file_roundtrip.yap` and `document_info.yap` launch
+and operate successfully. This confirms the basic API 1.1 path, but does not by
+itself close removal/reinsertion, interrupted real-FAT save, all launch modes or
+100-cycle heap stability below.
+
 ## Goal
 
 Launch one external `.yap` application safely from SD, give it predictable RAM

@@ -108,7 +108,8 @@ def resource_name(name: str) -> bytes:
     return encoded
 
 
-def pack(manifest_path: Path, lua_path: Path, output_path: Path) -> None:
+def pack(manifest_path: Path, lua_path: Path, output_path: Path,
+         *, quiet: bool = False) -> None:
     config = json.loads(manifest_path.read_text(encoding="utf-8"))
     lua_source = lua_path.read_bytes()
     if not lua_source or len(lua_source)>65536:
@@ -153,7 +154,8 @@ def pack(manifest_path: Path, lua_path: Path, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(package)
     inspect(output_path, quiet=True)
-    print(f"packed {output_path} ({len(package)} bytes)")
+    if not quiet:
+        print(f"packed {output_path} ({len(package)} bytes)")
 
 
 def c_string(field: bytes) -> str:

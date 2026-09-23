@@ -14,6 +14,8 @@ called out explicitly and must not be mistaken for implemented code.
 - The custom system keyboard passed its initial on-board visibility and input
   check and now serves Notes through an adapter. Repetition, close, rotation and
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
+- Stage 5 Work package 1 has started: the project template and high-level
+  `tools/yap.py` workflow are implemented. Canvas/UI API 1.2 are not implemented.
 
 ## Boot and update flow
 
@@ -60,6 +62,8 @@ Arduino global `SD` implementation without concurrent access.
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
 | `src/vendor/lua549/*` | Pinned official Lua 5.4.9 core and selected safe libraries | Reproducibly installed by `tools/install_lua.py`; 32-bit number configuration. |
+| `tools/yap.py` | High-level cross-platform SDK CLI | Creates without overwrite; check/build/inspect delegate to deterministic `yap_pack.py`. |
+| `templates/yap_app/*` | Valid API 1.1 starter application | Package resource, queued buttons and app-controlled exit; no capabilities by default. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |
@@ -152,6 +156,7 @@ git diff --check
 python3 tools/test_yap_runtime.py
 python3 tools/build_yap_examples.py
 python3 -m unittest discover -s tests
+python3 tools/yap.py check templates/yap_app
 ```
 
 Compilation proves API and memory-layout compatibility, not touch/display

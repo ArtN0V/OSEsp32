@@ -1,0 +1,13 @@
+{
+  "id": "org.example.app",
+  "name": "New YAP app",
+  "api_minor": 1,
+  "entry": "main",
+  "mode": "windowed",
+  "memory": 32768,
+  "capabilities": [],
+  "associations": [],
+  "resources": {
+    "welcome.txt": "assets/welcome.txt"
+  }
+}

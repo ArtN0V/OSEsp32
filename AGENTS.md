@@ -28,7 +28,9 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: run the Stage 4 hardware acceptance matrix in docs/STAGE_4.md.
+Current priorities: finish the Stage 4 hardware acceptance matrix in
+docs/STAGE_4.md and implement Stage 5 in the ordered work packages from
+docs/STAGE_5.md. Do not let new SDK work waive an open hardware gate.
 The code-complete slice includes AppStorageService, YapUiHost, system document
 pickers and FileAssociationService. Read docs/YAP_API.md before runtime changes.
 Lua receives queued button IDs, not callbacks or pointers; all file handles are
