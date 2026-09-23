@@ -27,7 +27,7 @@ MODES = {"windowed": 0, "fullscreen": 1, "exclusive": 2}
 
 def fixed(value: str, width: int, *, ascii_only: bool = False) -> bytes:
     encoded = value.encode("ascii" if ascii_only else "utf-8")
-    if not encoded or len(encoded) >= width or any(byte < 0x20 for byte in encoded):
+    if not encoded or len(encoded) >= width or any(byte < 0x20 or byte==127 for byte in encoded):
         raise ValueError(f"value {value!r} does not fit a {width}-byte field")
     return encoded + bytes(width - len(encoded))
 
@@ -51,6 +51,8 @@ def validate_identifier(value: str) -> None:
 
 
 def build_manifest(config: dict, code_index: int) -> bytes:
+    if int(config.get("api_minor",0)) not in (0,1):
+        raise ValueError("unsupported API minor")
     app_id = str(config["id"])
     name = str(config["name"])
     entry = str(config.get("entry", "main"))
@@ -96,14 +98,37 @@ def build_manifest(config: dict, code_index: int) -> bytes:
     return bytes(manifest)
 
 
+def resource_name(name: str) -> bytes:
+    encoded = fixed(name,64)
+    if any(char in '\\:*?"<>|' for char in name):
+        raise ValueError("invalid resource path")
+    for part in name.split('/'):
+        if not part or len(part.encode('utf-8'))>48 or part[-1] in '. ':
+            raise ValueError("invalid resource path")
+    return encoded
+
+
 def pack(manifest_path: Path, lua_path: Path, output_path: Path) -> None:
     config = json.loads(manifest_path.read_text(encoding="utf-8"))
     lua_source = lua_path.read_bytes()
-    if not lua_source:
-        raise ValueError("Lua source is empty")
+    if not lua_source or len(lua_source)>65536:
+        raise ValueError("Lua source must contain 1..65536 bytes")
     lua_source.decode("utf-8")
     manifest = build_manifest(config, code_index=1)
     sections = [(b"MANF", manifest), (b"LUAS", lua_source)]
+    resources=config.get("resources",{})
+    if not isinstance(resources,dict):
+        raise ValueError("resources must be an object mapping package names to files")
+    names=set()
+    for name, filename in resources.items():
+        if not isinstance(name,str) or not isinstance(filename,str):
+            raise ValueError("resource names and source files must be strings")
+        if name.casefold() in names:
+            raise ValueError("duplicate resource name")
+        names.add(name.casefold())
+        sections.append((b"RSRC",resource_name(name)+(manifest_path.parent / filename).read_bytes()))
+    if len(sections)>16:
+        raise ValueError("at most 14 resources are allowed")
     table_end = HEADER_SIZE + len(sections) * SECTION_SIZE
     cursor = align4(table_end)
     entries: list[tuple[bytes, int, bytes]] = []
@@ -134,12 +159,15 @@ def pack(manifest_path: Path, lua_path: Path, output_path: Path) -> None:
 def c_string(field: bytes) -> str:
     if b"\0" not in field:
         raise ValueError("unterminated fixed string")
-    return field.split(b"\0", 1)[0].decode("utf-8")
+    value,padding=field.split(b"\0",1)
+    if any(padding):
+        raise ValueError("non-zero fixed string padding")
+    return value.decode("utf-8")
 
 
 def inspect(path: Path, *, quiet: bool = False) -> None:
     data = path.read_bytes()
-    if len(data) < HEADER_SIZE:
+    if len(data) < HEADER_SIZE or len(data)>MAX_PACKAGE_SIZE:
         raise ValueError("truncated header")
     (magic, version, header_size, declared_size, table_offset, section_count,
      manifest_index, expected_crc, flags, reserved) = struct.unpack_from(
@@ -155,17 +183,47 @@ def inspect(path: Path, *, quiet: bool = False) -> None:
     if zlib.crc32(crc_data) != expected_crc:
         raise ValueError("package CRC mismatch")
     sections = []
+    bounds=[]
+    table_end=table_offset+section_count*SECTION_SIZE
+    if table_end>len(data):
+        raise ValueError("truncated section table")
+    resource_names=set()
     for index in range(section_count):
         entry = struct.unpack_from("<4sIIII", data, table_offset + index * SECTION_SIZE)
         section_type, offset, length, expected_section_crc, section_flags = entry
         payload = data[offset:offset + length]
-        if (section_flags or offset % 4 or len(payload) != length
+        if (section_flags or offset % 4 or not length or offset<table_end or len(payload) != length
                 or zlib.crc32(payload) != expected_section_crc):
             raise ValueError(f"invalid section {index}")
+        if section_type not in (b'MANF',b'LUAS',b'ICON',b'RSRC'):
+            raise ValueError("unknown section")
+        if any(offset<end and start<offset+length for start,end in bounds):
+            raise ValueError("overlapping sections")
+        bounds.append((offset,offset+length))
+        if section_type==b'RSRC':
+            if length<64:
+                raise ValueError("short resource header")
+            name=c_string(payload[:64]); resource_name(name)
+            if name.casefold() in resource_names:
+                raise ValueError("duplicate resource")
+            resource_names.add(name.casefold())
         sections.append((section_type, payload))
+    types=[kind for kind,_ in sections]
+    if types.count(b'MANF')!=1 or types.count(b'LUAS')!=1 or types.count(b'ICON')>1:
+        raise ValueError("duplicate/missing mandatory section")
     section_type, manifest = sections[manifest_index]
     if section_type != b"MANF" or len(manifest) != MANIFEST_SIZE:
         raise ValueError("invalid manifest section")
+    magic,size,runtime,mode,major,minor,count,reserved,memory,caps,code,icon=struct.unpack_from('<4sHBBBBBBIIHH',manifest)
+    if (magic!=b'MNF1' or size!=160 or runtime!=1 or mode>2 or major!=1 or minor>1 or count>4 or reserved
+            or caps & ~31 or code>=section_count or types[code]!=b'LUAS'
+            or (icon!=65535 and (icon>=section_count or types[icon]!=b'ICON'))):
+        raise ValueError("invalid manifest fields")
+    config={"id":c_string(manifest[24:56]),"name":c_string(manifest[56:104]),
+            "entry":c_string(manifest[104:128]),"memory":memory,"mode":list(MODES)[mode],"api_minor":minor,
+            "capabilities":[name for name,bit in CAPABILITIES.items() if caps&bit],
+            "associations":[c_string(manifest[128+i*8:136+i*8]) for i in range(count)]}
+    build_manifest(config,code)
     if not quiet:
         print(f"name: {c_string(manifest[56:104])}")
         print(f"id: {c_string(manifest[24:56])}")

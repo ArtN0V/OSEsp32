@@ -24,6 +24,7 @@ WallpaperService* WallpaperService::active_ = nullptr;
 void WallpaperService::begin(StorageService& storage, Logger& logger) {
   active_ = this;
   storage_ = &storage;
+  storage.recoverBuiltinReplacement(OPTIMIZED_SD_PATH);
   logger_ = &logger;
   invalidateCache();
   decoder_ = lv_image_decoder_create();
@@ -78,6 +79,7 @@ uint16_t WallpaperService::pixelToRgb565(const uint8_t* pixel,
 bool WallpaperService::optimize(const char* sourceLvglPath,
                                 uint16_t fillColor) {
   if (!storage_ || !storage_->mounted() || !sourceLvglPath) return false;
+  if (!storage_->recoverBuiltinReplacement(OPTIMIZED_SD_PATH)) return false;
   storage_->removePath(TEMP_SD_PATH);
 
   lv_image_decoder_dsc_t source;
@@ -249,7 +251,7 @@ lv_result_t WallpaperService::decoderInfo(lv_image_decoder_t*,
 
 lv_result_t WallpaperService::decoderOpen(lv_image_decoder_t*,
                                           lv_image_decoder_dsc_t* descriptor) {
-  DecodeSession* session = new DecodeSession{};
+  DecodeSession* session = new (std::nothrow) DecodeSession{};
   if (!session) return LV_RESULT_INVALID;
   if (lv_fs_open(&session->file, static_cast<const char*>(descriptor->src),
                  LV_FS_MODE_RD) != LV_FS_RES_OK) {

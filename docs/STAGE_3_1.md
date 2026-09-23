@@ -24,9 +24,9 @@ uses the same service through its own textarea adapter; its old keyboard object,
 maps and callbacks are removed. Repetition, close, rotation and memory checks
 remain open.
 
-The next regression adds language switching by a guarded hold/swipe gesture on
-the space key. It must be checked for accidental spaces, accidental switches
-and correct persistence while moving between Notes fields.
+Language switching by a guarded hold/swipe gesture on the space key is
+implemented. Accidental-space/switch and repeated field-transition checks on
+the physical board remain part of the acceptance gate.
 
 ### 2. Storage hardening
 
@@ -35,17 +35,18 @@ and correct persistence while moving between Notes fields.
 - Keep non-overwriting rename separate from transactional replacement.
 - Preserve the old destination as `.bak` until a completed temporary file is
   installed.
-- Add recognized `.tmp`/`.bak` mount recovery before Stage 4 applications can
-  replace arbitrary user documents.
+- Add narrowly recognized `.tmp`/`.bak` recovery before built-in documents load
+  and a separate journaled transaction format for Stage 4 user documents.
 
-Current status: canonicalization and backup/restore replacement are complete;
-mount-time remnant recovery is deferred to the application-storage work.
+Current status: canonicalization, backup/restore and scoped Notes/OWP recovery
+are complete. Third-party documents use the Stage 4 four-slot journal; damaged
+or unexplained remnants are preserved rather than deleted automatically.
 
 ### 3. Shell decomposition boundary
 
 - Keep one UI task and one active foreground application.
 - Extract shared overlays before extracting application pages.
-- Define one owner for keyboard, dialogs and future Open/Save picker.
+- Define one owner for keyboard, dialogs and Open/Save picker.
 - Move service construction toward `OSEsp32App` incrementally; do not perform a
   risky all-at-once rewrite of `DesktopShell`.
 
@@ -55,14 +56,16 @@ application can request text input without copying layout code.
 ### 4. Documentation and observability
 
 - Keep `PROJECT_MAP.md` aligned with actual source ownership.
-- Label planned Stage 4 types and tasks as planned, not current.
+- Keep implemented Stage 4 types distinct from later SDK/network plans.
 - Log keyboard state, dimensions, key count and memory baselines in its test.
 - Record physical results instead of inferring success from compilation.
 
 ## Acceptance checks
 
-1. Full clean build remains below 50% of the application partition and below
-   40% static RAM.
+1. The Stage 3.1 pre-runtime build remains below 50% of the application
+   partition and 40% static RAM. The audited Stage 4 build is 53.0% flash and
+   28.2% static RAM after adding vendored Lua and application services; its
+   current guard is 65% flash / 40% static RAM.
 2. Storage rejects `..`, `.`, backslashes, control characters and overlong
    paths while accepting ordinary UTF-8 names containing two dots internally.
 3. A failed optimized-wallpaper replacement leaves the previous complete OWP

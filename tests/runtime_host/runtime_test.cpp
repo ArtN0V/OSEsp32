@@ -1,29 +1,116 @@
 #include "../../src/runtime/YapRuntimeService.h"
 #include "../../src/runtime/AppLifecycle.h"
+#include "../../src/ui/SystemExitGesture.h"
+#include "../../src/services/DateTimeService.h"
 #include <cassert>
 #include <cstdio>
 #include <string>
+#include <map>
+#include <set>
+#include <fstream>
+#include <iterator>
+#include <strings.h>
 
 uint32_t testMillis = 0;
 TestESP ESP;
+int64_t testMicros=0;
+bool SystemSettingsService::loadClock(uint64_t& utc,int16_t& zone) const { utc=1700000000; zone=0; return true; }
+bool SystemSettingsService::saveClock(uint64_t,int16_t) const { return true; }
 static std::string source;
 static bool simulateRemoved = false;
+static std::map<std::string,std::string> files;
+static std::set<std::string> directories;
+static int failRename=0;
 StorageService::StorageService() { mounted_ = true; }
-void StorageService::update() { mounted_ = !simulateRemoved; }
+void StorageService::update() { if (mounted_==simulateRemoved) ++generation_; mounted_ = !simulateRemoved; }
 void Logger::info(const char*, const char*, ...) {}
-bool StorageService::readFileRange(const char*, uint32_t offset, uint8_t* out,
+bool StorageService::isYapPath(const char* path) {
+  const char* ext=strrchr(path,'.'); return ext && !strcasecmp(ext,".yap");
+}
+bool StorageService::computeFileCrc32(const char* path,uint32_t offset,uint32_t length,uint32_t& crc,uint32_t zeroOffset,uint32_t zeroLength) const {
+  if (!files.count(path) || offset>files[path].size() || length>files[path].size()-offset) return false;
+  uint32_t value=0xffffffff;
+  for (uint32_t i=offset;i<offset+length;++i) {
+    uint8_t byte=static_cast<uint8_t>(files[path][i]);
+    if (i>=zeroOffset && i-zeroOffset<zeroLength) byte=0;
+    value^=byte;
+    for (int bit=0;bit<8;++bit) value=(value>>1)^(0xedb88320u & (0u-(value&1)));
+  }
+  crc=value^0xffffffff; return true;
+}
+bool StorageService::exists(const char* path) const { return files.count(path)||directories.count(path); }
+bool StorageService::removePath(const char* path) { files.erase(path); return true; }
+bool StorageService::renamePath(const char* from,const char* to) {
+  if (failRename && !--failRename) return false;
+  if (!files.count(from) || exists(to)) return false;
+  files[to]=files[from]; files.erase(from); return true;
+}
+bool StorageService::makeDirectory(const char* path) { directories.insert(path); return true; }
+uint64_t StorageService::freeBytes() const { return 100*1024*1024; }
+bool StorageService::fileSize(const char* path,uint32_t& size) const {
+  if (!files.count(path)) return false;
+  size=files[path].size(); return true;
+}
+bool StorageService::writeRange(const char* path,uint32_t offset,const uint8_t* data,size_t length,bool truncate) {
+  if (truncate) files[path].clear();
+  if (!files.count(path) || offset>files[path].size()) return false;
+  auto& value=files[path]; if (offset+length>value.size()) value.resize(offset+length);
+  if (length) memcpy(&value[offset],data,length); return true;
+}
+bool StorageService::readFile(const char* path,char* out,size_t capacity,size_t& length,bool) {
+  if (!files.count(path) || files[path].size()>=capacity) return false;
+  length=files[path].size(); memcpy(out,files[path].data(),length); out[length]=0; return true;
+}
+bool StorageService::listDirectoryPage(const char*,uint16_t,StorageEntry*,uint8_t,uint8_t& count,uint16_t& total) {
+  count=0; total=0; return true;
+}
+bool StorageService::readFileRange(const char* path, uint32_t offset, uint8_t* out,
                                   size_t length, size_t& received) const {
-  if (offset > source.size()) return false;
-  received = std::min(length, source.size() - offset);
-  memcpy(out, source.data() + offset, received);
+  const auto& data=*path ? files[path] : source;
+  if (offset > data.size()) return false;
+  received = std::min(length, data.size() - offset);
+  memcpy(out, data.data() + offset, received);
   return true;
 }
 
-int main() {
+int main(int argc,char** argv) {
   StorageService storage;
   Logger logger;
+  YapPackageService parser; parser.begin(storage,logger);
+  for (int i=1;i<argc;++i) {
+    std::ifstream input(argv[i],std::ios::binary);
+    files["/fixture.yap"]=std::string(std::istreambuf_iterator<char>(input),{});
+    if (i==1) files["/valid.yap"]=files["/fixture.yap"];
+    YapPackageInfo parsed;
+    YapError error=parser.inspect("/fixture.yap",parsed);
+    assert((error==YapError::None)==(i==1));
+  }
+  SystemSettingsService settings; DateTimeService clock; clock.begin(settings);
+  testMicros=60LL*86400*1000000;
+  assert(clock.utcNow()==1700000000+60LL*86400);
+  assert(clock.setUtc(3600,-120));
+  struct tm output={}; assert(!clock.localTime(output));
+  assert(clock.setUtc(3600,60)); assert(clock.localTime(output) && output.tm_hour==2);
+  struct tm date={}; date.tm_year=124; date.tm_mon=1; date.tm_mday=30;
+  assert(!clock.setLocal(date,0)); date.tm_mday=29; assert(clock.setLocal(date,0));
+  date.tm_year=125; assert(!clock.setLocal(date,0));
+  puts("PASS: real package parser rejects malformed fixtures; clock rollover/calendar");
   YapRuntimeService runtime;
   runtime.begin(storage, logger);
+  if (argc>1) {
+    YapPackageInfo demo;
+    assert(parser.inspect("/valid.yap",demo)==YapError::None);
+    assert(runtime.start(demo));
+    for (int tick=0;tick<100 && runtime.request()!=YapRuntimeService::Request::Event;++tick) runtime.update();
+    assert(runtime.running() && runtime.request()==YapRuntimeService::Request::Event);
+    assert(strstr(runtime.result().label,"Hello from a streamed"));
+    runtime.postEvent(1); runtime.update();
+    assert(runtime.request()==YapRuntimeService::Request::Text);
+    runtime.reply("Test edit"); runtime.update();
+    assert(runtime.request()==YapRuntimeService::Request::Event);
+    runtime.postEvent(6); runtime.update();
+    assert(!runtime.running() && runtime.result().exitedByApp);
+  }
   YapPackageInfo package;
   package.sectionCount = 1;
   package.sections[0].type = YapPackageService::TYPE_LUA_SOURCE;
@@ -85,8 +172,9 @@ int main() {
   runtime.update(); runtime.update();
   simulateRemoved = true; storage.update();
   runtime.update();
-  assert(runtime.result().status == YapRuntimeStatus::IoError);
-  assert(runtime.result().remainingLuaBytes == 0);
+  assert(runtime.running()); // Retain RAM until the user chooses Retry/Close.
+  runtime.stop(YapRuntimeStatus::IoError);
+  assert(runtime.result().remainingLuaBytes==0);
   simulateRemoved = false; storage.update();
   source = "function main() end";
   package.sections[0].length = source.size() + 200;
@@ -97,6 +185,132 @@ int main() {
   assert(start("function main() osesp32.sleep(20) osesp32.ui.label('wrap') end"));
   drain();
   assert(!strcmp(runtime.result().label, "wrap"));
+  for (int repeat = 0; repeat < 100; ++repeat) {
+    assert(start("function main() osesp32.sleep(1) osesp32.ui.label('exit') "
+                 "pcall(function() osesp32.exit() end) error('must not resume') end"));
+    drain();
+    assert(runtime.result().status == YapRuntimeStatus::Success);
+    assert(runtime.result().exitedByApp);
+    assert(!strcmp(runtime.result().label, "exit"));
+  }
+  assert(start("osesp32.exit(); error('top-level code must not resume')"));
+  drain();
+  assert(runtime.result().exitedByApp);
+  assert(start("function main() end"));
+  drain();
+  assert(!runtime.result().exitedByApp);
+
+  strlcpy(package.manifest.appId,"test.app",sizeof(package.manifest.appId));
+  package.manifest.capabilities=YapPrivateRead|YapPrivateWrite|YapDocumentsOpen|YapDocumentsCreate|YapDocumentsReplace;
+  package.manifest.associationCount=1;
+  strlcpy(package.manifest.associations[0],"txt",9);
+  assert(start("function main() local f=osesp32.fs "
+    "local h=assert(f.open('data:/test.txt','w')); assert(f.write(h,'hello\\0world')); "
+    "assert(f.close(h)); h=assert(f.open('data:/test.txt','r')); assert(f.size(h)==11); "
+    "assert(f.read(h,512)=='hello\\0world'); assert(f.read(h,1)==''); "
+    "assert(f.seek(h,6)); assert(f.read(h,5)=='world'); assert(f.close(h)); "
+    "local ok,e=f.read(h,1); assert(ok==nil and e=='invalid_handle'); "
+    "assert(f.open('data:/../escape','w')==nil); "
+    "assert(f.open('/Documents/a.txt','r')==nil); "
+    "assert(f.open('data:/','w')==nil); end"));
+  drain(); assert(runtime.result().status==YapRuntimeStatus::Success);
+  assert(files["/OSEsp32/Data/test.app/test.txt"]==std::string("hello\0world",11));
+  assert(start("function main() osesp32.ui.button(1,'Exit'); assert(osesp32.ui.wait()==1); "
+    "local value=osesp32.ui.text('Hi'); assert(value=='Привет'); "
+    "local h=assert(osesp32.documents.open()); assert(osesp32.fs.read(h,3)=='old'); "
+    "assert(osesp32.fs.write(h,'evil')==nil); assert(osesp32.fs.close(h)); osesp32.exit() end"));
+  runtime.update(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Event);
+  runtime.postEvent(1); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Text);
+  runtime.reply("Привет"); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Open);
+  files["/Documents/a.txt"]="old";
+  int grant=runtime.files().grant("/Documents/a.txt","r"); assert(grant);
+  runtime.reply(nullptr,grant); drain();
+  assert(runtime.result().exitedByApp);
+  assert(start("function main() local h,e=osesp32.documents.save('a.txt'); assert(h==nil and e=='cancelled') end"));
+  runtime.update(); runtime.update(); runtime.reply(nullptr,0,"cancelled"); drain();
+  assert(runtime.result().status==YapRuntimeStatus::Success);
+
+  AppStorageService fs;
+  fs.begin(storage,package);
+  const char* invalid[]={"../x","/x","a//b","a/./b","a/../b","a.","a ","a\\b","\xc0\xaf","\xed\xa0\x80","\xf4\x90\x80\x80","\xe2\x82"};
+  for (auto* name:invalid) assert(!AppStorageService::validRelative(name));
+  assert(AppStorageService::validRelative("папка/файл.txt"));
+  assert(!fs.grant("/OSEsp32/Notes/a.txt","r"));
+  assert(!fs.grant("/Documents/a.bmp","w"));
+  int handles[4]; for (int& h:handles) { h=fs.open("data:/test.txt","r"); assert(h); }
+  assert(!fs.open("data:/test.txt","r"));
+  for (int h:handles) assert(fs.close(h));
+  int old=fs.open("data:/test.txt","r"); assert(old);
+  simulateRemoved=true; storage.update(); size_t count=0; uint8_t buffer[512];
+  assert(!fs.read(old,buffer,1,count));
+  simulateRemoved=false; storage.update();
+  assert(!fs.read(old,buffer,1,count));
+  fs.begin(storage,package);
+  int fresh=fs.open("data:/test.txt","r"); assert(fresh && fresh!=old);
+  assert(!fs.read(old,buffer,1,count)); fs.end();
+
+  // Cut at either rename, before commit, and after destination installation.
+  for (int phase=0;phase<4;++phase) {
+    assert(AppStorageService::recover(storage));
+    files["/Documents/a.txt"]="old";
+    fs.begin(storage,package);
+    int h=fs.grant("/Documents/a.txt","w"); assert(h);
+    assert(fs.write(h,reinterpret_cast<const uint8_t*>("new"),3));
+    assert(files["/Documents/a.txt"]=="old");
+    if (phase==1 || phase==2) { failRename=phase; assert(!fs.close(h)); }
+    if (phase==3) {
+      assert(storage.renamePath("/Documents/a.txt","/OSEsp32/Transactions/0.old"));
+      assert(storage.renamePath("/OSEsp32/Transactions/0.data","/Documents/a.txt"));
+    }
+    fs.invalidate(); fs.end(); failRename=0;
+    assert(AppStorageService::recover(storage));
+    assert(files["/Documents/a.txt"]==(phase==3 ? "new" : "old"));
+  }
+  fs.begin(storage,package);
+  int h=fs.grant("/Documents/a.txt","w"); assert(h);
+  assert(fs.write(h,reinterpret_cast<const uint8_t*>("committed"),9)); assert(fs.close(h));
+  assert(files["/Documents/a.txt"]=="committed");
+  h=fs.grant("/Documents/a.txt","w"); assert(h); assert(fs.write(h,buffer,1));
+  fs.end(); assert(files["/Documents/a.txt"]=="committed");
+  package.manifest.capabilities=0; fs.begin(storage,package);
+  assert(!fs.open("data:/test.txt","r")); assert(!strcmp(fs.error(),"permission_denied"));
+  assert(!fs.grant("/Documents/a.txt","r")); fs.end();
+  files["/OSEsp32/Transactions/0.txn"]="YTX1:00000000:/Documents/a.txt";
+  files["/OSEsp32/Transactions/0.data"]="untrusted";
+  assert(!AppStorageService::recover(storage));
+  assert(files.count("/OSEsp32/Transactions/0.txn") && files.count("/OSEsp32/Transactions/0.data"));
+  files.erase("/OSEsp32/Transactions/0.txn"); files.erase("/OSEsp32/Transactions/0.data");
+  // Package resources are bounded by the section, not the entire container.
+  strcpy(package.path,"/resource.yap"); package.sectionCount=2;
+  package.sections[1].type=YapPackageService::TYPE_RESOURCE;
+  package.sections[1].offset=0; package.sections[1].length=67;
+  files[package.path]=std::string("message.txt")+std::string(53,'\0')+"abcSECRET";
+  fs.begin(storage,package); h=fs.open("app:/message.txt","r"); assert(h);
+  assert(fs.read(h,buffer,512,count) && count==3 && !memcmp(buffer,"abc",3));
+  assert(!fs.write(h,buffer,1)); fs.end();
+  puts("PASS: file namespace/capabilities, UTF-8, handles, removal, transactions, UI requests");
+
+  SystemExitGesture gesture;
+  assert(!gesture.update(true, 0, 0, 0)); // Initial held tap is ignored.
+  assert(!gesture.update(true, 0, 0, 5000));
+  assert(!gesture.update(false, 0, 0, 5001));
+  assert(!gesture.update(true, 31, 31, 6000));
+  assert(!gesture.update(true, 31, 31, 7999));
+  assert(gesture.update(true, 31, 31, 8000));
+  assert(!gesture.update(true, 31, 31, 12000)); // One exit per hold.
+  gesture.update(false, 0, 0, 12001);
+  gesture.update(true, 0, 0, 13000);
+  assert(!gesture.update(true, 32, 0, 14999)); // Leaving cancels elapsed time.
+  assert(!gesture.update(true, 0, 0, 15000));
+  assert(!gesture.update(true, 0, 0, 16999));
+  assert(gesture.update(true, 0, 0, 17000));
+  gesture.update(false, 0, 0, UINT32_MAX - 1000);
+  gesture.update(true, 0, 0, UINT32_MAX - 999);
+  assert(!gesture.update(true, 0, 0, 999));
+  assert(gesture.update(true, 0, 0, 1000));
   AppLifecycle lifecycle;
   assert(lifecycle.begin());
   assert(!lifecycle.begin());
@@ -108,5 +322,5 @@ int main() {
   assert(lifecycle.begin()); lifecycle.prepared(false);
   lifecycle.stopped(); lifecycle.restored();
   assert(!lifecycle.active());
-  puts("PASS: 100 runs, quotas, pcall loop, errors, sleep/wrap, cancel, SD removal, lifecycle");
+  puts("PASS: 100 runs + 100 app exits, quotas, errors, sleep, cancel, SD, lifecycle, exit gesture");
 }

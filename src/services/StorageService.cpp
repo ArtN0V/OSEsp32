@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <strings.h>
+#include <new>
 
 #include "../board/BoardConfig.h"
 
@@ -21,6 +22,7 @@ bool StorageService::mount() {
   mounted_ = SD.begin(board::SD_CS, spi_, board::SD_FREQUENCY);
   lastProbeMs_ = millis();
   if (mounted_) {
+    ++generation_;
     ensureSystemDirectories();
     unavailableReported_ = false;
     logger_->info("storage", "SD mounted: %llu MiB",
@@ -40,7 +42,8 @@ bool StorageService::mount() {
 void StorageService::ensureSystemDirectories() {
   static constexpr const char* directories[] = {
       "/OSEsp32", "/OSEsp32/Apps", "/OSEsp32/Data",
-      "/OSEsp32/Wallpapers", "/OSEsp32/Notes"};
+      "/OSEsp32/Wallpapers", "/OSEsp32/Notes", "/OSEsp32/Transactions",
+      "/Documents"};
   for (const char* directory : directories) {
     if (!SD.exists(directory) && !SD.mkdir(directory)) {
       logger_->warning("storage", "could not create %s", directory);
@@ -51,6 +54,7 @@ void StorageService::ensureSystemDirectories() {
 void StorageService::markRemoved() {
   if (!mounted_) return;
   mounted_ = false;
+  ++generation_;
   SD.end();
   logger_->warning("storage", "SD card removed");
   events_->publish(SystemEventType::StorageRemoved);
@@ -61,7 +65,8 @@ void StorageService::update() {
   if (now - lastProbeMs_ < 3000) return;
   lastProbeMs_ = now;
   if (mounted_) {
-    if (SD.cardType() == CARD_NONE) markRemoved();
+    uint8_t probe[512];
+    if (SD.cardType() == CARD_NONE || !SD.readRAW(probe, 0)) markRemoved();
   } else {
     mount();
   }
@@ -98,7 +103,12 @@ const char* StorageService::normalizePath(const char* path, char* buffer,
     memcpy(buffer + outputLength, component, componentLength);
     outputLength += componentLength;
     cursor += componentLength;
-    while (*cursor == '/') ++cursor;
+    if (*cursor == '/') {
+      ++cursor;
+      // A root slash is accepted, but empty interior/trailing components are
+      // ambiguous on FAT and must not canonicalize to another path.
+      if (!*cursor || *cursor == '/') return nullptr;
+    }
   }
   buffer[outputLength] = '\0';
   return buffer;
@@ -120,6 +130,10 @@ bool StorageService::listDirectoryPage(const char* path, uint16_t offset,
 
   File file = directory.openNextFile(FILE_READ);
   while (file) {
+    // A truncated path can point to a different file. Never publish it.
+    if (strlen(file.name())>=sizeof(entries[0].name) || strlen(file.path())>=sizeof(entries[0].path)) {
+      file.close(); file=directory.openNextFile(FILE_READ); continue;
+    }
     if (totalCount >= offset && count < capacity) {
       StorageEntry& entry = entries[count++];
       strlcpy(entry.name, file.name(), sizeof(entry.name));
@@ -127,6 +141,7 @@ bool StorageService::listDirectoryPage(const char* path, uint16_t offset,
       entry.size = static_cast<uint32_t>(file.size());
       entry.directory = file.isDirectory();
     }
+    if (totalCount==UINT16_MAX) { file.close(); break; }
     ++totalCount;
     file.close();
     file = directory.openNextFile(FILE_READ);
@@ -139,6 +154,21 @@ bool StorageService::exists(const char* path) const {
   char normalized[129];
   return mounted_ && normalizePath(path, normalized, sizeof(normalized)) &&
          SD.exists(normalized);
+}
+
+bool StorageService::recoverBuiltinReplacement(const char* path) {
+  char target[129];
+  if (!mounted_ || !normalizePath(path,target,sizeof(target))) return false;
+  const char* name=target+min(strlen(target),static_cast<size_t>(15));
+  const char* ext=strrchr(name,'.');
+  const bool note=!strncmp(target,"/OSEsp32/Notes/",15) && *name && !strchr(name,'/') && ext && !strcasecmp(ext,".note");
+  if (!note && strcmp(target,"/OSEsp32/Wallpapers/desktop.owp")) return false;
+  char backup[145]; snprintf(backup,sizeof(backup),"%s.bak",target);
+  if (!SD.exists(backup)) return true;
+  // Only our known built-in transaction destinations are eligible. A target
+  // installed by rename was fully written before the backup was made.
+  if (!SD.exists(target)) return SD.rename(backup,target);
+  return SD.remove(backup);
 }
 
 bool StorageService::removePath(const char* path) {
@@ -175,7 +205,14 @@ bool StorageService::replacePathAtomic(const char* completedTemporary,
   if (snprintf(backup, sizeof(backup), "%s.bak", target) >=
       static_cast<int>(sizeof(backup)))
     return false;
-  if (SD.exists(backup) && !SD.remove(backup)) return false;
+  // Never destroy the only remaining old copy from an interrupted replace.
+  if (SD.exists(backup)) {
+    if (!SD.exists(target)) {
+      if (!SD.rename(backup, target)) return false;
+    } else {
+      return false; // Preserve ambiguous remnants for recovery/manual review.
+    }
+  }
   const bool hadOriginal = SD.exists(target);
   if (hadOriginal && !SD.rename(target, backup)) return false;
   if (!SD.rename(temporary, target)) {
@@ -207,6 +244,36 @@ bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
   file.close();
   buffer[length] = '\0';
   return length == wanted;
+}
+
+bool StorageService::makeDirectory(const char* path) {
+  char normalized[129];
+  if (!mounted_ || !normalizePath(path, normalized, sizeof(normalized))) return false;
+  if (!SD.exists(normalized)) return SD.mkdir(normalized);
+  File file = SD.open(normalized, FILE_READ);
+  const bool directory = file && file.isDirectory();
+  file.close();
+  return directory;
+}
+
+uint64_t StorageService::freeBytes() const {
+  if (!mounted_) return 0;
+  const uint64_t total = SD.totalBytes(), used = SD.usedBytes();
+  return total > used ? total - used : 0;
+}
+
+bool StorageService::writeRange(const char* path, uint32_t offset,
+                                const uint8_t* data, size_t length, bool truncate) {
+  char normalized[129];
+  if (!mounted_ || length > 512 || (!data && length) ||
+      !normalizePath(path, normalized, sizeof(normalized))) return false;
+  File file = SD.open(normalized, truncate ? "w" : "r+");
+  if (!file || file.isDirectory()) { file.close(); return false; }
+  const bool ok = offset <= file.size() && file.seek(offset) &&
+                  (!length || file.write(data, length) == length);
+  file.flush();
+  file.close();
+  return ok;
 }
 
 bool StorageService::fileSize(const char* path, uint32_t& size) const {
@@ -287,6 +354,7 @@ bool StorageService::computeFileCrc32(const char* path, uint32_t offset,
                                       -static_cast<int32_t>(value & 1u)));
     }
     consumed += received;
+    if (!(consumed%4096)) delay(1); // Let RTOS housekeeping run during large CRC scans.
   }
   file.close();
   crc = value ^ 0xFFFFFFFFu;
@@ -388,7 +456,7 @@ void* StorageService::openCallback(lv_fs_drv_t* driver, const char* path,
   char normalized[129];
   if (!normalizePath(path, normalized, sizeof(normalized))) return nullptr;
   const char* openMode = (mode & LV_FS_MODE_WR) ? FILE_WRITE : FILE_READ;
-  File* file = new File(SD.open(normalized, openMode));
+  File* file = new (std::nothrow) File(SD.open(normalized, openMode));
   if (!*file) {
     delete file;
     return nullptr;
@@ -448,7 +516,7 @@ void* StorageService::directoryOpenCallback(lv_fs_drv_t* driver,
   if (!service->mounted_) return nullptr;
   char normalized[129];
   if (!normalizePath(path, normalized, sizeof(normalized))) return nullptr;
-  File* directory = new File(SD.open(normalized, FILE_READ));
+  File* directory = new (std::nothrow) File(SD.open(normalized, FILE_READ));
   if (!*directory || !directory->isDirectory()) {
     if (*directory) directory->close();
     delete directory;

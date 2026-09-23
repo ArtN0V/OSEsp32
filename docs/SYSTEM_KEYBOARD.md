@@ -71,12 +71,11 @@ class TextInputClient {
 };
 ```
 
-Stage 3.1 supplies an `LvglTextareaInputClient` adapter. The isolated Keyboard
-Test currently owns the first adapter. After its physical acceptance, Notes
-will own another adapter and may switch its target between title and body;
-`SystemKeyboard` never owns either textarea. A future YAP adapter will translate
-the same operations into runtime events without exposing LVGL pointers or
-native memory.
+Stage 3.1 supplies an `LvglTextareaInputClient` adapter. Keyboard Test, Notes
+and the Stage 4 `YapUiHost` each attach this adapter to their current system-owned
+textarea; `SystemKeyboard` never owns a textarea. YAP receives the completed
+UTF-8 value only after an external coroutine wait and never receives an LVGL
+pointer or native memory.
 
 `show(client, options)` is idempotent and replaces the previous session only
 after notifying it. `hide(reason)` detaches the client before changing LVGL

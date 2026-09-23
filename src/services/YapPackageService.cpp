@@ -1,4 +1,6 @@
 #include "YapPackageService.h"
+#include "AppStorageService.h"
+#include <strings.h>
 
 #include <ctype.h>
 #include <string.h>
@@ -75,6 +77,8 @@ bool YapPackageService::copyFixedString(const uint8_t* source, size_t width,
   size_t length = 0;
   while (length < width && source[length]) ++length;
   if (!length || length == width) return false;
+  for (size_t index=length+1;index<width;++index)
+    if (source[index]) return false;
   if (utf8 && !validUtf8(source, length)) return false;
   memcpy(output, source, length);
   output[length] = '\0';
@@ -122,7 +126,7 @@ YapError YapPackageService::parseManifest(const char* path,
   uint8_t bytes[MANIFEST_SIZE];
   size_t received = 0;
   if (!storage_->readFileRange(path, section.offset, bytes, sizeof(bytes),
-                               received))
+                               received) || received!=sizeof(bytes))
     return YapError::IoError;
   if (memcmp(bytes, "MNF1", 4) || read16(bytes + 4) != MANIFEST_SIZE ||
       bytes[6] != 1 || bytes[11] != 0)
@@ -138,7 +142,7 @@ YapError YapPackageService::parseManifest(const char* path,
   manifest.capabilities = read32(bytes + 16);
   manifest.codeSection = read16(bytes + 20);
   manifest.iconSection = read16(bytes + 22);
-  if (manifest.apiMajor != API_MAJOR) return YapError::UnsupportedApi;
+  if (manifest.apiMajor != API_MAJOR || manifest.apiMinor>API_MINOR) return YapError::UnsupportedApi;
   if (manifest.requestedMemory < MIN_MEMORY ||
       manifest.requestedMemory > MAX_MEMORY)
     return YapError::BadManifest;
@@ -177,7 +181,7 @@ YapError YapPackageService::inspect(const char* path, YapPackageInfo& info) {
   info = {};
   if (!storage_ || !storage_->mounted())
     return YapError::StorageUnavailable;
-  if (!path || !StorageService::isYapPath(path)) return YapError::BadHeader;
+  if (!path || strlen(path)>=sizeof(info.path) || !StorageService::isYapPath(path)) return YapError::BadHeader;
   uint32_t actualSize = 0;
   if (!storage_->fileSize(path, actualSize)) return YapError::IoError;
   if (actualSize < HEADER_SIZE + 2 * SECTION_SIZE + MANIFEST_SIZE)
@@ -186,7 +190,7 @@ YapError YapPackageService::inspect(const char* path, YapPackageInfo& info) {
 
   uint8_t header[HEADER_SIZE];
   size_t received = 0;
-  if (!storage_->readFileRange(path, 0, header, sizeof(header), received))
+  if (!storage_->readFileRange(path, 0, header, sizeof(header), received) || received!=sizeof(header))
     return YapError::IoError;
   if (memcmp(header, "YAP1", 4)) return YapError::BadMagic;
   if (read16(header + 4) != FORMAT_VERSION)
@@ -225,7 +229,7 @@ YapError YapPackageService::inspect(const char* path, YapPackageInfo& info) {
   for (uint16_t index = 0; index < sectionCount; ++index) {
     const uint32_t entryOffset = tableOffset + index * SECTION_SIZE;
     if (!storage_->readFileRange(path, entryOffset, entry, sizeof(entry),
-                                 received))
+                                 received) || received!=sizeof(entry))
       return YapError::IoError;
     YapSection& section = info.sections[index];
     section.type = read32(entry);
@@ -256,6 +260,17 @@ YapError YapPackageService::inspect(const char* path, YapPackageInfo& info) {
                                     sectionCrc))
       return YapError::IoError;
     if (sectionCrc != section.crc32) return YapError::BadSectionCrc;
+    if (section.type==TYPE_RESOURCE) {
+      uint8_t rawName[64], rawOther[64]; char name[65], otherName[65];
+      if (section.length<64 || !storage_->readFileRange(path,section.offset,rawName,64,received) || received!=64 ||
+          !copyFixedString(rawName,64,name,sizeof(name),true) || !AppStorageService::validRelative(name)) return YapError::BadSectionTable;
+      for (uint16_t previous=0;previous<index;++previous) {
+        if (info.sections[previous].type!=TYPE_RESOURCE) continue;
+        if (!storage_->readFileRange(path,info.sections[previous].offset,rawOther,64,received) || received!=64 ||
+            !copyFixedString(rawOther,64,otherName,sizeof(otherName),true)) return YapError::IoError;
+        if (!strcasecmp(name,otherName)) return YapError::DuplicateSection;
+      }
+    }
   }
   if (manifestCount != 1 || codeCount != 1 || iconCount > 1)
     return YapError::DuplicateSection;

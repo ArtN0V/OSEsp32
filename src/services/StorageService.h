@@ -41,6 +41,12 @@ class StorageService {
                         uint32_t zeroLength = 0) const;
   bool writeFileAtomic(const char* path, const uint8_t* data, size_t length);
   bool mounted() const { return mounted_; }
+  uint32_t generation() const { return generation_; }
+  bool makeDirectory(const char* path);
+  uint64_t freeBytes() const;
+  bool writeRange(const char* path, uint32_t offset, const uint8_t* data,
+                   size_t length, bool truncate = false);
+  bool recoverBuiltinReplacement(const char* path);
   static bool isImagePath(const char* path);
   static bool isYapPath(const char* path);
   static bool makeLvglPath(const char* sdPath, char* output, size_t outputSize);
@@ -51,6 +57,7 @@ class StorageService {
   Logger* logger_ = nullptr;
   bool spiStarted_ = false;
   bool mounted_ = false;
+  uint32_t generation_ = 0;
   bool lvglRegistered_ = false;
   bool unavailableReported_ = false;
   uint32_t lastProbeMs_ = 0;

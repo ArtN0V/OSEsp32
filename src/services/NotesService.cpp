@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <strings.h>
+#include <new>
 
 namespace {
 constexpr const char* NOTES_DIRECTORY = "/OSEsp32/Notes";
@@ -41,7 +42,17 @@ uint8_t NotesService::list(NoteSummary* summaries, uint8_t capacity) {
                                      total))
       break;
     for (uint8_t index = 0; index < count && resultCount < capacity; ++index) {
-      if (entries[index].directory || !isNotePath(entries[index].path)) continue;
+      if (entries[index].directory) continue;
+      char* suffix=strrchr(entries[index].path,'.');
+      if (suffix && !strcmp(suffix,".bak")) {
+        *suffix=0;
+        if (!isNotePath(entries[index].path)) continue;
+        const bool targetAlreadyListed=storage_->exists(entries[index].path);
+        if (!storage_->recoverBuiltinReplacement(entries[index].path)) continue;
+        // A backup is a recovery artifact, never a second gallery card.
+        if (targetAlreadyListed) continue;
+      }
+      if (!isNotePath(entries[index].path)) continue;
       char prefix[322];
       size_t length = 0;
       if (!storage_->readFile(entries[index].path, prefix, sizeof(prefix),
@@ -72,7 +83,8 @@ bool NotesService::load(const char* path, char* title, size_t titleCapacity,
                         char* body, size_t bodyCapacity) {
   if (!storage_ || !path || !title || !body) return false;
   const size_t capacity = titleCapacity + bodyCapacity + 1;
-  char* document = new char[capacity];
+  if (!storage_->recoverBuiltinReplacement(path)) return false;
+  char* document = new (std::nothrow) char[capacity];
   if (!document) return false;
   size_t length = 0;
   const bool loaded = storage_->readFile(path, document, capacity, length);
@@ -104,7 +116,8 @@ bool NotesService::save(char* path, size_t pathCapacity, const char* title,
   const size_t titleLength = strlen(title);
   const size_t bodyLength = strlen(body);
   const size_t length = titleLength + 1 + bodyLength;
-  char* document = new char[length + 1];
+  if (!storage_->recoverBuiltinReplacement(path)) return false;
+  char* document = new (std::nothrow) char[length + 1];
   if (!document) return false;
   memcpy(document, title, titleLength);
   document[titleLength] = '\n';

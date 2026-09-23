@@ -8,7 +8,7 @@ called out explicitly and must not be mistaken for implemented code.
 - Target: ESP32-2432S028 without PSRAM, ILI9341 320×240, XPT2046 touch.
 - Primary tool: Arduino IDE; `OSEsp32.ino` is the entry point.
 - Reproducible check: PlatformIO environment `cyd_stage3` with LVGL 9.5.0.
-- Current roadmap stage: **Stage 4 lifecycle and exclusive restore**. Note deletion,
+- Current roadmap stage: **Stage 4 code-complete, hardware acceptance pending**. Note deletion,
   system keyboard and its language gesture have passed the reported on-board
   functional check; repeated memory checks remain open.
 - The custom system keyboard passed its initial on-board visibility and input
@@ -53,8 +53,12 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/WallpaperService.*` | OWP1 conversion and two-strip decoder cache | Uses private LVGL decoder APIs pinned to LVGL 9.5.0. |
 | `src/services/NotesService.*` | Bounded `.note` listing/load/save/delete | Delete accepts only direct `.note` children of `/OSEsp32/Notes`; UI belongs elsewhere. |
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
+| `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
+| `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
+| `src/ui/YapUiHost.*` | YAP buttons, text dialog, file picker and SD Retry/Close | Sole LVGL owner; shared SystemKeyboard adapter; callbacks only queue actions. |
 | `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM with host-owned coroutine | start/update/stop; count-hook yields, sleep and complete teardown; no LVGL ownership. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
+| `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
 | `src/vendor/lua549/*` | Pinned official Lua 5.4.9 core and selected safe libraries | Reproducibly installed by `tools/install_lua.py`; 32-bit number configuration. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
@@ -74,9 +78,9 @@ and test input adapters. LVGL callbacks route through the static
 `DesktopShell::active_` pointer. This works for a single shell instance but is
 not the final composition boundary for reusable system UI.
 
-Target ownership is described in `SYSTEM_KEYBOARD.md`: keyboard and later file
-pickers/dialogs become system overlays with one owner and request-based APIs.
-Built-in applications must stop owning shared overlay objects.
+Keyboard ownership is described in `SYSTEM_KEYBOARD.md`. YAP dialogs/pickers
+are now extracted into `YapUiHost`. Built-in applications still use legacy shell
+dialogs and should migrate gradually, without duplicating the shared keyboard.
 
 ## Memory model
 
@@ -97,7 +101,9 @@ Built-in applications must stop owning shared overlay objects.
 | Path | Owner | Format |
 |---|---|---|
 | `/OSEsp32/Apps` | YAP validator and runtime | Frozen `YAP1`; windowed/fullscreen/exclusive coroutine execution |
-| `/OSEsp32/Data` | future application storage | per-app directories, Stage 4 |
+| `/OSEsp32/Data/<id>` | `AppStorageService` | private app files, no raw paths exposed to Lua |
+| `/OSEsp32/Transactions/0..3.{txn,data,old}` | `AppStorageService` | YTX1 checksummed target journal, staged bytes, backup |
+| `/Documents` | user/system pickers | default document folder; other non-system folders may be selected |
 | `/OSEsp32/Notes` | `NotesService` | first line title, remaining UTF-8 body, `.note` |
 | `/OSEsp32/Wallpapers/desktop.owp` | `WallpaperService` | packed `OWP1`, 320×204 RGB565 |
 
@@ -112,6 +118,7 @@ Progressive JPEG, PNG and arbitrary scaling are not implemented.
 | `osesp32_touch` | `TouchDriver` | versioned calibration ranges and inversion flags |
 | `yellow_touch` | `TouchDriver` | legacy calibration migration source |
 | `osesp32_boot` | `BootModeService` | one-shot next boot mode |
+| `osesp32_assoc` | `FileAssociationService` | extension key -> selected package path or @viewer; reset from Settings |
 
 `osesp32_cfg` currently uses keys `brightness`, `rotate180`, `wallpaper`,
 `desk_color`, `language`, `clock_utc`, `clock_zone`, `ss_enabled`,
@@ -134,6 +141,8 @@ until an RTC or future network synchronization source is added.
   submit requests and adapters.
 - YAP format/parser: `YAP1_FORMAT.md` and `YapPackageService`; execution:
   `YapRuntimeService`; measurements: `LUA_RUNTIME_SPIKE.md`.
+- App API: `YAP_API.md`; storage: `AppStorageService`; app widgets/pickers:
+  `YapUiHost`; association candidates/defaults: `FileAssociationService`.
 
 ## Verification commands
 
@@ -142,12 +151,15 @@ PYTHONPATH=/tmp/yellowos-platformio python3 -m platformio run --environment cyd_
 git diff --check
 python3 tools/test_yap_runtime.py
 python3 tools/build_yap_examples.py
+python3 -m unittest discover -s tests
 ```
 
 Compilation proves API and memory-layout compatibility, not touch/display
 behavior. Hardware changes require the acceptance checklist for their stage.
-The runtime host test compiles the actual C++ service plus vendored Lua with
-ASan/UBSan and stubbed board/storage interfaces. Its synthetic heap counters
+The runtime host test compiles actual runtime, parser, app storage, date/time
+and vendored Lua with ASan/UBSan and stubbed board/storage interfaces. It checks
+cut-save phases, stale handles, permissions, UTF-8 paths and asynchronous replies.
+Its synthetic heap counters
 must not be quoted as ESP32 memory measurements.
 
 ## Known debt and gates
@@ -156,9 +168,10 @@ must not be quoted as ESP32 memory measurements.
    logic. Extract system overlays first, then built-in applications gradually.
 2. Note deletion and space-swipe keyboard switching passed the reported basic
    on-board check; repetition, rotation and memory trends still need recording.
-3. Storage is cooperative, not a separate task, despite some older target
-   diagrams. A storage task is optional Stage 4 work.
+3. Storage and Lua are deliberately cooperative, not separate tasks. An
+   incremental package validator or storage worker is a later responsiveness
+   improvement, not unfinished Stage 4 authority work.
 4. `WallpaperService` uses LVGL private decoder headers. LVGL upgrades require
    a dedicated compatibility test.
 5. There are no host UI tests. Physical checks remain required, with a minimal
-   keyboard harness planned for Stage 3.1.
+   keyboard harness available in the system UI. See AUDIT.md for remaining risks.

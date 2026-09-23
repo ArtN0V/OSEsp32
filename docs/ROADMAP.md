@@ -49,7 +49,7 @@ checks remain before Stage 3.1 can close.
 
 ## Stage 4 — application runtime
 
-Status: **lifecycle slice implemented; hardware acceptance pending**. YAP1 is frozen; its streaming
+Status: **implementation complete; hardware acceptance pending**. YAP1 is frozen; its streaming
 validator, host packer, Files metadata view and constrained Lua 5.4.9 runtime
 are present. Hello runs within a manifest memory quota and the VM is destroyed
 before the result window opens. Dynamic measurements still need the board.
@@ -71,16 +71,22 @@ Build the first complete `.yap` execution path rather than only embedding Lua:
   launch/close returns heap and the largest free block to a stable baseline.
 
 Current checkpoint: windowed/fullscreen/exclusive launch and shell restoration
-are implemented with a system EXIT button. Lua advances in 1,000-instruction
+are implemented. Windowed keeps its system EXIT button; fullscreen/exclusive
+use `osesp32.exit()` from app logic, with an invisible corner-hold recovery
+gesture. Explicit app exit returns directly to the desktop. Lua advances in 1,000-instruction
 slices and can wait with `osesp32.sleep`; the desktop stays responsive between
 slices. Exclusive releases the wallpaper cache and desktop/keyboard objects.
 Host tests exercise 100 runs, failure/limit paths and cancellation; physical
-CYD checks are pending. UI callbacks and application file APIs remain later
-Stage 4 work. Next: `app:/`/`data:/` storage and capability-bounded handles.
+CYD checks are pending. AppStorageService now provides app:/ resources, data:/
+private files, four handles, 512-byte transfers and journaled replacement.
+YapUiHost owns six app buttons, queued events, shared-keyboard text entry,
+Open/Save and SD Retry/Close dialogs. File associations are scanned with fixed
+limits, user defaults are persisted and can be reset in Settings.
+File round-trip and document-info samples are included. Next: physical Stage 4
+acceptance, then Stage 5 Canvas/SDK, not another runtime foundation slice.
 
-YAP applications must consume Stage 3.1 system services rather than adding
-their own keyboards or file dialogs. The first self-terminating slice does not
-request text input and keeps its result UI system-owned.
+YAP applications consume system services rather than owning keyboards/file
+dialogs. APIs and their deliberate limits are frozen in [YAP_API.md](YAP_API.md).
 
 Do not implement a general SD swap file. Code and resources may be streamed,
 and an explicit paged-data API can be added later, but Lua heap and native UI
@@ -94,8 +100,8 @@ and memory stress reference: shell-owned Open/Save dialogs, BMP import/export,
 atomic replacement, SD-removal recovery and a native canvas that never exposes
 pixels as Lua tables. Start with a measured exclusive RGB565 or indexed canvas;
 add a tiled SD-backed canvas only if the RAM version cannot meet the budget.
-Add Windows-like **Open with** handling and an optional saved default when BMP
-has both the built-in Viewer and Paint associations.
+Extend the Stage 4 **Open with** registry for installation/uninstallation and
+larger libraries; BMP already supports Viewer and third-party candidates.
 Extend the built-in image viewer with scaling and optional PNG support only if
 memory tests permit it.
 
@@ -103,8 +109,10 @@ memory tests permit it.
 
 Add watchdog handling, leak tests, crash logs, permission review, package
 validation and repeated launch/close endurance tests. Add interrupted-save and
-SD removal/reinsertion tests, recovery of `.tmp`/`.bak` transactions, storage
-quotas and optional explicitly paged collections for datasets larger than RAM.
+SD removal/reinsertion tests on hardware, fuzz and fault-injection expansion,
+aggregate per-app storage quotas, LVGL low-memory resilience and optional
+explicitly paged collections for datasets larger than RAM. Basic journal
+recovery, per-file limits and an SD free-space reserve are already in Stage 4.
 
 ## Stage 7 — optional connectivity
 

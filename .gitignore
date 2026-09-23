@@ -6,3 +6,5 @@
 .arduinoIDE/
 build/
 .pio/
+__pycache__/
+*.py[cod]

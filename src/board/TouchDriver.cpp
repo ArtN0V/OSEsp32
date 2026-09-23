@@ -52,7 +52,7 @@ bool TouchDriver::loadCalibrationFrom(const char* nameSpace) {
     const uint16_t xMax = preferences.getUShort("xmax", calibration_.rawXMax);
     const uint16_t yMin = preferences.getUShort("ymin", calibration_.rawYMin);
     const uint16_t yMax = preferences.getUShort("ymax", calibration_.rawYMax);
-    if (xMax > xMin + 500 && yMax > yMin + 500) {
+    if (xMax <=4095 && yMax<=4095 && xMax > xMin + 500 && yMax > yMin + 500) {
       calibration_.rawXMin = xMin;
       calibration_.rawXMax = xMax;
       calibration_.rawYMin = yMin;

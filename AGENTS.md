@@ -28,9 +28,15 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priority: physically verify lifecycle demos in all three launch modes,
-especially EXIT, exclusive wallpaper/keyboard restoration and repeated heap
-baselines. AppLifecycle and coroutine scheduling exist; next implement bounded
-application storage. Keep Lua UI callbacks and arbitrary file paths unavailable
-until their ownership/capability boundaries exist. Run tools/test_yap_runtime.py
-after runtime changes; it tests actual Lua with ASan/UBSan on the host.
+Current priority: run the Stage 4 hardware acceptance matrix in docs/STAGE_4.md.
+The code-complete slice includes AppStorageService, YapUiHost, system document
+pickers and FileAssociationService. Read docs/YAP_API.md before runtime changes.
+Lua receives queued button IDs, not callbacks or pointers; all file handles are
+session capabilities. Never recover transaction slots while a live session owns
+them: first invalidate handles and pause, then recover on explicit Retry.
+Run tools/test_yap_runtime.py after runtime/storage changes; it tests actual Lua,
+package parser and AppStorageService with ASan/UBSan and mocked physical I/O.
+
+Fullscreen/exclusive must not show a system EXIT button or title bar. Apps
+call osesp32.exit() for normal return; keep the invisible two-second top-left
+hold for recovery. Windowed retains EXIT. Explicit app exit skips the report.

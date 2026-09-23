@@ -5,9 +5,10 @@ ESP32-2432S028 Cheap Yellow Display. The project is built as a normal Arduino
 IDE sketch while keeping the implementation in modular C++ files.
 
 Stages 0–2 established the hardware, platform foundation and graphical shell;
-most Stage 3 storage and personalization work is present. Development is now
-on **Stage 4: application runtime**; cooperative YAP execution and the three
-launch modes are implemented. The normal boot opens the LVGL desktop; the
+Stage 3 storage and personalization features are present. **Stage 4 application
+runtime implementation is complete and awaiting physical acceptance**: YAP
+execution, capability files, system dialogs and all three launch modes are
+implemented. The normal boot opens the LVGL desktop; the
 proven diagnostic UI remains available as a recovery mode.
 
 ## Current capabilities
@@ -31,6 +32,9 @@ proven diagnostic UI remains available as a recovery mode.
 - First-boot and Settings-driven five-point touch calibration stored in NVS.
 - Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
   light sensor and memory/stress testing.
+- Sandboxed `.yap` applications with fixed Lua memory/CPU budgets, package
+  resources, private data, system Open/Save, text input, file associations and
+  recoverable transactional document writes.
 
 ## Arduino IDE setup
 
@@ -177,9 +181,9 @@ hold for about 0.3 seconds and swipe horizontally to change the keyboard
 language. The selection remains active for later text fields during the current
 session.
 
-### YAP applications — Stage 4 foundation
+### YAP applications — Stage 4
 
-The first Stage 4 execution slice recognizes `.yap` files in Files, validates
+The Stage 4 implementation recognizes `.yap` files in Files, validates
 the frozen YAP1 container without loading it all into RAM, and can run its Lua
 source inside the requested 16–96 KiB quota. A guard limits each burst between
 explicit waits to 200,000 instructions or 250 ms of active execution. Lua
@@ -198,17 +202,32 @@ Run `python tools/build_yap_examples.py` to create Hello plus controlled
 compile-error, missing-entry, out-of-memory and infinite-loop packages. Their
 expected results are documented in
 [examples/yap_runtime_tests/README.md](examples/yap_runtime_tests/README.md).
-The current application API provides `osesp32.ui.label(text)` and
-`osesp32.sleep(milliseconds)`. The latter keeps touch/display processing alive
-while the app waits. Application file access and UI event callbacks are planned.
+The same command creates `file_roundtrip.yap` and `document_info.yap`.
+Applications can show six OS-owned buttons, wait for queued taps, request the
+shared English/Russian keyboard, stream named package resources, keep private
+`data:/` files and request exact user-document handles through system Open/Save
+dialogs. No raw SD path or LVGL pointer enters Lua. Writes remain staged until
+`fs.close(handle)` commits them. Exit immediately ends Lua execution and returns
+to the desktop, so applications must save before calling it. The complete API,
+limits and stable errors are in [docs/YAP_API.md](docs/YAP_API.md).
 
 The same build command also creates `lifecycle_windowed.yap`,
 `lifecycle_fullscreen.yap` and `lifecycle_exclusive.yap`. They show a counter
-until **EXIT** is pressed. Exclusive mode releases desktop objects, the
+for ten seconds, then call `osesp32.exit()`. The system title bar and **EXIT**
+button appear only in windowed mode. Fullscreen/exclusive reserve no visible
+system controls; hold the top-left corner (32x32 pixels) for two seconds for
+emergency exit. Exclusive mode releases desktop objects, the
 keyboard and wallpaper cache, then rebuilds the desktop on return. Settings,
 calibration and the current file-manager path are retained. The scrollable
 result page includes memory metrics and **RUN AGAIN**. See
 [the lifecycle test guide](examples/lifecycle_yap/README.md).
+
+When Files opens a document, OSEsp32 scans the bounded application registry and
+shows **Open with** if several handlers match. The user can remember a default;
+**Settings → Default apps** resets all remembered choices. On detected SD
+removal an active YAP pauses and displays **Retry / Close app**. Retry validates
+the package again, repairs known transactions and issues a new handle session;
+old handles and grants never become valid again.
 
 ### Date, time and screen saver
 
@@ -274,6 +293,7 @@ docs/STAGE_2.md           graphical-shell plan and acceptance checks
 docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
+docs/YAP_API.md           callable YAP 1.1 API, limits and failure semantics
 ```
 
 ## Safety

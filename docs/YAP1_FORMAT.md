@@ -40,8 +40,10 @@ Known FourCC types:
 - `MANF` — fixed manifest below;
 - `LUAS` — UTF-8 Lua source (bytecode is deliberately not accepted);
 - `ICON` — optional package icon, decoding contract comes with installation;
-- `RSRC` — opaque read-only resource; the named resource index is added before
-  the `app:/` API is enabled.
+- `RSRC` — named read-only resource. Its payload begins with a 64-byte
+  NUL-terminated UTF-8 relative path followed by arbitrary resource bytes.
+  Names follow the `app:/` path restrictions and must be unique ignoring ASCII
+  case. Zero-byte resource content is valid (section length is then 64).
 
 ## MANF payload — 160 bytes
 
@@ -81,13 +83,13 @@ Capability bits:
 | 4 | `documents.replace` |
 
 Capabilities are requests only. A manifest never grants ambient SD access.
-Associations require `documents.open` or `documents.create`; they are merely
-candidates for a later system-owned **Open with** choice.
+Associations require `documents.open` or `documents.create`; they are candidates
+for the system-owned **Open with** choice and never replace a default silently.
 
 ## Validation order
 
 The OS validates path/size, header, table bounds, package CRC, every section's
-bounds/overlap/type/CRC, and finally the manifest. Lua source is not read or
-executed when any earlier check fails. Current firmware stops after validation
-and displays package information; the quota-controlled Lua runtime is the next
-Stage 4 package.
+bounds/overlap/type/CRC, resource names/duplicates, supported API minor and
+finally the manifest. Lua source is not read or executed when an earlier check
+fails. Valid source is streamed into the quota-controlled Lua runtime. API 1.0
+and 1.1 are accepted; a newer minor is rejected instead of guessed.

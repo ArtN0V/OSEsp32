@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <cstdio>
+inline void delay(unsigned) {}
 using std::min;
 extern uint32_t testMillis;
 inline uint32_t millis() { return testMillis; }

@@ -1,0 +1,9 @@
+{
+  "id": "org.osesp32.docinfo",
+  "name": "Document info",
+  "api_minor": 1,
+  "mode": "fullscreen",
+  "memory": 32768,
+  "capabilities": ["documents.open"],
+  "associations": ["txt", "bmp"]
+}

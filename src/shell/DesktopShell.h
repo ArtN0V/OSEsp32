@@ -13,11 +13,14 @@
 #include "../services/TouchCalibrationService.h"
 #include "../services/WallpaperService.h"
 #include "../services/YapPackageService.h"
+#include "../services/FileAssociationService.h"
 #include "../runtime/YapRuntimeService.h"
+#include "../ui/YapUiHost.h"
 #include "../runtime/AppLifecycle.h"
 #include "../ui/LvglPort.h"
 #include "../ui/OSEsp32Font.h"
 #include "../ui/SystemKeyboard.h"
+#include "../ui/SystemExitGesture.h"
 
 enum class ShellAppId : uint8_t {
   Files,
@@ -58,8 +61,16 @@ class DesktopShell {
   NotesService notes_;
   WallpaperService wallpaperService_;
   YapPackageService yapPackages_;
+  FileAssociationService associations_;
+  char associatedDocument_[129]={};
+  bool associationRequested_=false,associationScanning_=false;
+  int associationChoice_=-1;
+  lv_obj_t* associationRemember_=nullptr;
   YapRuntimeService yapRuntime_;
+  YapUiHost yapUi_;
+  uint32_t yapStorageGeneration_=0;
   AppLifecycle yapLifecycle_;
+  SystemExitGesture yapExitGesture_;
   YapPackageInfo runningPackage_;
   YapRuntimeResult lastYapResult_;
   lv_obj_t* yapOverlay_ = nullptr;
@@ -166,6 +177,10 @@ class DesktopShell {
   void openYapPackage(const char* path);
   void processPendingYapRun();
   void updateYapSession();
+  void updateAssociations();
+  void chooseAssociation(uint8_t index);
+  static void associationEvent(lv_event_t* event);
+  static void associationResetEvent(lv_event_t* event);
   void prepareYapView();
   void restoreYapDesktop();
   void showYapRuntimeResult(const YapPackageInfo& package,

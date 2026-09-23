@@ -21,7 +21,7 @@ class DateTimeService {
  private:
   SystemSettingsService* settings_ = nullptr;
   uint64_t baseUtc_ = 0;
-  uint32_t baseMillis_ = 0;
+  int64_t baseMicros_ = 0;
   int16_t timezoneMinutes_ = 180;
   bool valid_ = false;
 

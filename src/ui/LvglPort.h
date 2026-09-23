@@ -20,6 +20,7 @@ class LvglPort {
   TouchDriver& touchDriver() { return touchDriver_; }
   bool touchPressed() const { return touchPressed_; }
   const TouchPoint& touchPoint() const { return touchPoint_; }
+  void waitForTouchRelease() { if (pointer_) lv_indev_wait_release(pointer_); }
 
  private:
   DisplayDriver displayDriver_;

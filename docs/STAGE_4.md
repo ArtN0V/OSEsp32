@@ -1,11 +1,10 @@
 # Roadmap Stage 4 — sandboxed YAP runtime
 
-Status: first execution slice implemented. The frozen YAP1 parser/validator,
-host packer and package-information view now feed a constrained Lua 5.4.9 VM.
-Hello, controlled failures and three cooperative lifecycle demos exist.
-Windowed/fullscreen/exclusive preparation, system EXIT and restoration are
-implemented; `AppStorageService` and UI event callbacks remain planned. The
-target-board runtime checks below remain mandatory.
+Status (2026-09-23): implementation complete; target-board acceptance pending.
+Runtime, capability storage, named resources, system UI requests, transactional
+save/recovery, SD Retry/Close and file associations are implemented. The public
+contract is in `YAP_API.md`; limits and audit results are in `AUDIT.md`.
+Host tests/builds are not substitutes for the hardware checks below.
 
 ## Goal
 
@@ -99,9 +98,9 @@ the picker and binds permission to one selected file and one app session.
 
 Document replacement is a system operation:
 
-1. create a uniquely owned sibling `.tmp` file;
+1. create a slot-owned `.data` file plus checksummed target `.txn` journal;
 2. stream data, verify byte counts, flush and close;
-3. move an existing destination to a recognized `.bak` name;
+3. move an existing destination to the slot's `.old` backup;
 4. rename the completed temporary file to the destination;
 5. remove the backup only after success;
 6. repair or offer recovery for known remnants on the next mount.
@@ -130,16 +129,46 @@ part of OSEsp32.
 5. Lifecycle manager and exclusive shell teardown/rebuild. **Implemented;
    dynamic wallpaper release, keyboard teardown and restore need board checks.**
 6. Instruction/time enforcement and system exit path. **Implemented with a
-   host-owned coroutine, 1,000-instruction yields and an EXIT overlay. The
+   host-owned coroutine, 1,000-instruction yields, `osesp32.exit()` and system
+   recovery (windowed EXIT / fullscreen two-second top-left hold). The
    200,000-instruction/250 ms active-execution budget resets after explicit
    sleep; UI/wait time is excluded. Source compilation/native C calls are
    synchronous, not hard real-time preemptible.**
-7. `app:/` and `data:/` storage with fixed handle table.
-8. Shell-owned Open/Save dialogs and exact-file capabilities.
-9. Transactional save/recovery and SD-removal pause flow.
-10. File round-trip sample, packaging tool skeleton and endurance tests.
+7. `app:/` and `data:/` storage with fixed handle table. **Implemented/tested.**
+8. System-owned Open/Save dialogs, six buttons, queued events, shared keyboard
+   and exact-file capabilities. **Implemented; board UI checks pending.**
+9. Transactional save/recovery and SD-removal pause flow. **Implemented;
+   logical cut phases tested; real FAT/removal checks pending.**
+10. File round-trip sample, resource-aware packer and host endurance tests.
+    **Implemented/tested.**
 11. File-association registry with Open with conflict resolution and persisted
-    user defaults.
+    user defaults. **Implemented; board/NVS checks pending.**
+
+## How to run the new board checks
+
+1. Back up the card. Build examples with `python3 tools/build_yap_examples.py`
+   (Windows: `python tools/build_yap_examples.py`).
+2. Copy `build/file_roundtrip.yap` and `build/document_info.yap` into
+   `/OSEsp32/Apps`. Prepare a short UTF-8 `/Documents/test.txt` and a spare BMP.
+3. Run File round trip. Startup verifies a package resource and private write/read.
+   Check Edit text in English/Russian; hide/reopen keyboard; OK/Cancel.
+4. Open a TXT. Save as `example.txt` in Documents; confirm Create refuses an
+   existing name, then select the existing file and confirm Replace. Cancel
+   should not modify it. Verify contents on another device.
+5. Open TXT/BMP from Files. Choose either demo (BMP also offers Image Viewer).
+   Enable Always use, reopen; reset in Settings → Default apps and check choice
+   returns. Document info is fullscreen and exits through its own Exit button.
+6. With a demo waiting, remove SD, then reinsert and choose Retry. RAM state
+   should survive; subsequent operations must acquire new handles. Repeat
+   with another card: old handles must never revive after detected removal.
+   Close must work without a card. Use disposable data for interrupted writes.
+7. Repeat launch/close in all modes, including with wallpaper and after keyboard
+   use; record heap and largest-block baselines, not just successful repainting.
+
+Automated coverage: real Lua/allocator/parser/AppStorageService with ASan/UBSan,
+100 Hello runs + 100 exits, permission/traversal/resource bounds, stale tokens,
+close/abort, transaction cut phases, UTF-8 and real packed demo interaction.
+Physical SD and LVGL are not emulated by these tests.
 
 ## Acceptance checks
 

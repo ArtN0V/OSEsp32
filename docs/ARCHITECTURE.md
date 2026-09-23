@@ -1,9 +1,10 @@
 # OSEsp32 architecture decisions
 
-This document contains current decisions and planned Stage 4 boundaries. For
+This document contains current decisions, implemented Stage 4 boundaries and
+later target architecture. For
 the exact source that exists today, start with `PROJECT_MAP.md`.
-`YapRuntimeService` and `AppLifecycle` now exist. `AppStorageService`, UI event
-callbacks and separate application/network tasks remain plans.
+`YapRuntimeService`, `AppLifecycle`, `AppStorageService`, `YapUiHost` and
+`FileAssociationService` exist. Separate application/network tasks remain plans.
 
 ## Product boundary
 
@@ -106,7 +107,20 @@ instructions the count hook yields; quotas are checked outside Lua so `pcall`
 cannot swallow termination. `osesp32.sleep(1..60000)` yields until a deadline,
 allowing long-lived cooperative apps. `osesp32.ui.label(text)` copies up to 96
 bytes to a system-owned label; no LVGL pointers or UI callbacks reach Lua.
-The OS-owned EXIT button enqueues cancellation. No LVGL object is deleted
+`osesp32.exit()` yields permanently and requests successful termination. It
+does not return to Lua, even through pcall; the host closes the VM and restores
+the desktop without opening the diagnostic report. Saving or confirmation
+belongs before this call. Six system-owned buttons emit bounded queued IDs;
+Lua awaits them through `ui.wait()` instead of running inside LVGL callbacks.
+Text/file requests suspend the coroutine; response allocation occurs inside
+protected `lua_resume`, so an OOM response cannot panic outside Lua's boundary.
+
+Only windowed apps have the OS title bar and EXIT button. Fullscreen and
+exclusive have no visible system exit control. A 2-second hold inside the
+top-left 32x32 screen pixels requests emergency cancellation; it uses calibrated,
+rotation-adjusted input independently of Lua. An initial release is required
+and leaving the corner cancels the hold. Touch is consumed until release on
+teardown so it cannot activate the restored desktop. No LVGL object is deleted
 inside its own event callback.
 
 App-created coroutines, metatable manipulation, table.sort and string pattern
@@ -117,22 +131,16 @@ real-time preemptor for C code.
 
 ## Threading model
 
-- UI task: LVGL timer, input dispatch and all object mutation.
-- Storage task: serialized SD access.
-- Application task: Lua VM and application callbacks.
-- System task: settings, monitoring and lifecycle.
-- Network task: created only while network functionality is requested.
+- UI/application loop: LVGL, input, lifecycle, storage requests and one Lua
+  resume slice; this is the only implemented execution context here.
+- Optional future workers: serialized storage and network work that return
+  messages and never mutate LVGL or resume Lua directly.
 
-Only the cooperative Arduino/UI loop exists today. The storage, application,
-system and network task bullets above describe possible Stage 4/7 separation,
-not current FreeRTOS tasks.
-
-Stages 2 and 3 run the kernel, LVGL and serialized storage service
-cooperatively from the Arduino loop. This keeps both LVGL object mutation and
-SD access single-owner on the no-PSRAM target. Recovery diagnostics remain
-intentionally synchronous. A separate application task is considered in
-Stage 4; it must request storage work through the service instead of touching
-`SD` directly.
+All implemented stages run kernel, LVGL, serialized storage and bounded Lua
+slices cooperatively from the Arduino loop. This keeps object mutation and SD
+access single-owner on the no-PSRAM target. Recovery diagnostics remain
+intentionally synchronous. A later worker must request storage through the
+service and return messages; it cannot touch LVGL or expose Arduino `SD` to Lua.
 
 ## Application lifecycle and memory reclamation
 
@@ -166,9 +174,12 @@ The current exclusive implementation releases desktop objects, the keyboard
 tree, decoder cache entries and dynamically allocated wallpaper strips. Fixed
 Notes/File-service buffers, LVGL partial buffers and kernel state stay resident.
 File-manager path/page remain in the shell; settings remain in NVS. On restore,
-the desktop is rebuilt, then a scrollable execution report opens. A normal
-return, error, detected SD removal and EXIT all close the VM. Retry/Close for
-unsaved app documents is deferred until application file APIs exist.
+the desktop is rebuilt. An explicit app exit returns directly to the desktop;
+other completion paths open a scrollable execution report. A normal
+return, error and EXIT close the VM. Detected SD removal instead invalidates
+all file handles, pauses Lua and offers Retry/Close. Retry revalidates the package
+section table/CRCs, repairs transactions and starts a new file session; it never
+revives an old handle or silently re-grants the launch document.
 
 General virtual memory is out of scope. ESP32 pointers cannot transparently
 address SD data, and random swap traffic would be slow and fragile. Large data
@@ -177,9 +188,8 @@ objects are handles, not pointers.
 
 ## Application storage and capabilities
 
-Everything in this section is a Stage 4 contract. The current
-`StorageService` is a trusted built-in shell service, not yet the capability
-layer described below.
+The Stage 4 contract below is implemented. `StorageService` remains the trusted
+built-in SD owner; `AppStorageService` is the capability layer above it.
 
 All application I/O passes through an `AppStorageService` layered over the
 single-owner `StorageService`. Lua never receives `File`, `FILE*`, LVGL drive
@@ -207,11 +217,14 @@ and transactional replace. They do not reuse the LVGL viewer bridge's generic
 write mode or its heap-allocated `File` handles. The application layer uses a
 fixed handle table and a stricter component-by-component canonicalizer.
 
-Save/replace is transactional at the service level: write and flush a sibling
-temporary file, preserve an existing destination as a backup, rename the
-temporary file into place, then remove the backup. Boot/mount recovery resolves
-recognized `.tmp`/`.bak` remnants. Applications cannot implement this sequence
-with unrestricted rename/delete calls.
+Save/replace is transactional at the service level: stage into one of four
+system-owned `/OSEsp32/Transactions/<slot>.data` files, retain a checksummed
+target journal and preserve the destination in `<slot>.old` before rename.
+Only `close(handle)` commits; close(false), cancellation and app exit abort.
+Boot/new launch or paused-session Retry recovers known remnants; damaged
+journals and unexplained backups are preserved and block reuse. The previous
+built-in Notes/OWP `.bak` format has narrowly scoped recovery too. FAT hardware
+power-fail atomicity is not guaranteed. Apps have no unrestricted rename/delete.
 
 On SD removal, all affected handles become invalid and pending calls return
 `storage_removed`. The runtime pauses the app and presents a system-owned
@@ -281,9 +294,9 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 - The editor is fullscreen and sets the same shell lifecycle flag that future
   fullscreen `.yap` applications use. This suppresses the screen saver without
   coupling the saver to Notes specifically.
-- Text entry is not accepted on hardware. Notes must adopt the system-owned
-  input component in `SYSTEM_KEYBOARD.md`; it may not keep an application-owned
-  keyboard object.
+- Notes uses the system input component in `SYSTEM_KEYBOARD.md`; basic text
+  entry passed the user's board check. Repetition/rotation/heap acceptance
+  remains pending; there is no Notes-owned keyboard object.
 
 ## Stage 3 clock and screen-saver policy
 
@@ -305,7 +318,7 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 
 ## System UI overlay policy
 
-- Keyboard, confirmation dialogs, future Open/Save picker and exclusive-app
+- Keyboard, confirmation dialogs, Stage 4 Open/Save picker and exclusive-app
   exit control are OS-owned overlays. An application requests them and never
   creates, deletes or retains their LVGL roots.
 - Each overlay has one owner, an idempotent show/hide contract and an explicit
@@ -314,9 +327,10 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 - Overlay stacking is defined centrally. Application content receives the
   remaining work area when a docked overlay such as the keyboard becomes
   visible.
-- The first extraction is `SystemKeyboard`, implemented as a directly
+- `SystemKeyboard` is implemented as a directly
   controlled `lv_buttonmatrix` with an application-neutral input-client
-  adapter. See `SYSTEM_KEYBOARD.md`.
+  adapter; `YapUiHost` owns YAP buttons, text and file-dialog roots. See
+  `SYSTEM_KEYBOARD.md`.
 
 ## Current trusted-storage policy
 
@@ -328,5 +342,20 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
   backslashes, reserved separators and overlong output.
 - Rename is non-overwriting. Transactional replacement first preserves the
   existing destination as `.bak`, installs the completed temporary file, then
-  removes the backup. FAT is not fully power-fail-safe; recognized remnant
-  recovery is still required before third-party document replacement ships.
+  removes the backup. Known Notes/OWP backups are recovered before load/save;
+  third-party transactions use their separate journaled capability service.
+
+## Stage 4 limits and trust assumptions
+
+See `YAP_API.md` for the exact callable contract. No arbitrary GUI tree or native
+canvas is exposed yet. Six buttons, eight queued IDs, four handles and 512-byte
+transfers bound native memory independently of Lua's quota. Files can grow to
+1 MiB with 128 KiB card reserve; append copies at most 4 KiB synchronously.
+Larger rewrites are streamed to a different destination with explicit waits.
+
+CRC detects damage, not a malicious publisher. App IDs are self-declared and
+unauthenticated: different packages with the same ID share data. Install trusted
+packages only until signed identity/install policy exists. A card can still
+corrupt FAT metadata on power loss; use backups for important documents.
+SD removal is polled every three seconds with a real sector read; a swap that
+escapes polling is not a strong volume-identity guarantee. See `AUDIT.md`.

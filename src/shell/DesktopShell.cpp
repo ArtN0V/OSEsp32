@@ -1,6 +1,7 @@
 #include "DesktopShell.h"
 
 #include <strings.h>
+#include <new>
 
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -107,10 +108,12 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
                                              this);
 
   storage_.begin(kernel_->events(), kernel_->logger());
+  AppStorageService::recover(storage_);
   notes_.begin(storage_);
   storage_.registerLvglDriver();
   wallpaperService_.begin(storage_, kernel_->logger());
   yapPackages_.begin(storage_, kernel_->logger());
+  associations_.begin(storage_,yapPackages_);
   yapRuntime_.begin(storage_, kernel_->logger());
   previousStorageMounted_ = storage_.mounted();
   calibration_.begin(port_.touchDriver(), kernel_->events(), kernel_->logger(),
@@ -136,10 +139,12 @@ void DesktopShell::update() {
     return;
   }
   processPendingNoteDelete();
+  updateAssociations();
   processPendingYapRun();
   if (yapLifecycle_.active()) return;
   if (storage_.mounted() != previousStorageMounted_) {
     previousStorageMounted_ = storage_.mounted();
+    if (previousStorageMounted_) AppStorageService::recover(storage_);
     wallpaperService_.invalidateCache();
     if (previousStorageMounted_)
       applyWallpaper();
@@ -413,6 +418,9 @@ lv_obj_t* DesktopShell::createWindow(const char* title) {
 }
 
 void DesktopShell::closeWindow() {
+  associationScanning_=false;
+  associationRemember_=nullptr;
+  associationChoice_=-1;
   closeDialog();
   systemKeyboard_.hide();
   keyboardTestClient_.setTarget(nullptr);
@@ -653,9 +661,16 @@ void DesktopShell::processPendingYapRun() {
     return;
   }
 
+  if (!AppStorageService::recover(storage_)) {
+    showInfoDialog(tr("Application save recovery needs attention. Back up the SD card.",
+                      "Требуется восстановление файлов. Сделайте копию SD-карты."));
+    return;
+  }
+  yapStorageGeneration_=storage_.generation();
   yapHeapBeforePrepare_ = ESP.getFreeHeap();
   yapBlockBeforePrepare_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   lastYapResult_ = {};
+  yapExitGesture_.reset();
   yapLifecycle_.begin();
 }
 
@@ -687,19 +702,25 @@ void DesktopShell::prepareYapView() {
   const bool windowed = mode == YapLaunchMode::Windowed;
   lv_obj_set_pos(panel, windowed ? 5 : 0, windowed ? 5 : 0);
   lv_obj_set_size(panel, windowed ? 310 : 320, windowed ? 196 : 240);
-  lv_obj_t* title = lv_label_create(panel);
-  lv_obj_set_pos(title, 8, 9);
-  lv_obj_set_width(title, 206);
-  lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
-  lv_label_set_text(title, runningPackage_.manifest.name);
-  lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
-  createButton(panel, tr("EXIT", "ВЫХОД"), windowed ? 226 : 236,
-               3, 76, 30, yapExitEvent);
+  if (windowed) {
+    lv_obj_t* title = lv_label_create(panel);
+    lv_obj_set_pos(title, 8, 9);
+    lv_obj_set_width(title, 206);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    lv_label_set_text(title, runningPackage_.manifest.name);
+    lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
+    createButton(panel, tr("EXIT", "ВЫХОД"), 226, 3, 76, 30, yapExitEvent);
+  }
   yapOutput_ = lv_label_create(panel);
-  lv_obj_set_pos(yapOutput_, 10, 48);
+  lv_obj_set_pos(yapOutput_, 10, windowed ? 48 : 10);
   lv_obj_set_width(yapOutput_, 286);
+  lv_obj_set_height(yapOutput_,40);
+  lv_label_set_long_mode(yapOutput_,LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_color(yapOutput_, lv_color_hex(0x202020), 0);
   lv_label_set_text(yapOutput_, tr("Starting...", "Запуск..."));
+  systemKeyboard_.begin(lv_layer_top(),uiSmallFont(),kernel_->logger());
+  yapUi_.begin(panel,yapRuntime_,storage_,systemKeyboard_,uiSmallFont(),
+               language_==SystemLanguage::Russian,windowed ? 94 : 70);
   yapHeapPrepared_ = ESP.getFreeHeap();
   yapBlockPrepared_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 }
@@ -722,18 +743,37 @@ void DesktopShell::updateYapSession() {
                 sizeof(lastYapResult_.error));
         yapLifecycle_.prepared(false);
       } else {
-        const bool started = yapRuntime_.start(runningPackage_);
+        bool started = yapRuntime_.start(runningPackage_);
+        if (started && *associatedDocument_ && !yapRuntime_.grantInitialDocument(associatedDocument_)) {
+          yapRuntime_.stop(YapRuntimeStatus::IoError); started=false;
+        }
+        associatedDocument_[0]=0;
         lastYapResult_ = yapRuntime_.result();
         yapLifecycle_.prepared(started);
       }
       break;
     }
     case State::Running:
+      if (runningPackage_.manifest.launchMode != YapLaunchMode::Windowed &&
+          yapExitGesture_.update(port_.touchPressed(), port_.touchPoint().x,
+                                 port_.touchPoint().y, millis()))
+        yapLifecycle_.requestExit();
       if (yapLifecycle_.exitRequested()) {
         yapRuntime_.stop();
-      } else if (!storage_.mounted()) {
-        yapRuntime_.stop(YapRuntimeStatus::IoError);
       } else {
+        if (!storage_.mounted() || storage_.generation()!=yapStorageGeneration_)
+          yapUi_.storageLost();
+        yapUi_.update();
+        if (yapUi_.takeClose()) yapRuntime_.stop();
+        if (yapUi_.takeRetry()) {
+          YapPackageInfo check;
+          if (storage_.mounted() && yapPackages_.inspect(runningPackage_.path,check)==YapError::None &&
+              check.fileSize==runningPackage_.fileSize && check.sectionCount==runningPackage_.sectionCount &&
+              !memcmp(check.sections,runningPackage_.sections,sizeof(check.sections)) &&
+              AppStorageService::recover(storage_)) {
+            yapStorageGeneration_=storage_.generation(); yapUi_.storageRestored();
+          } else yapUi_.retryFailed();
+        }
         yapRuntime_.update();
       }
       lastYapResult_ = yapRuntime_.result();
@@ -746,14 +786,18 @@ void DesktopShell::updateYapSession() {
         yapRuntime_.stop();
         lastYapResult_ = yapRuntime_.result();
       }
+      yapUi_.shutdown();
+      systemKeyboard_.shutdown();
       if (yapOverlay_) lv_obj_delete(yapOverlay_);
+      port_.waitForTouchRelease();
       yapOverlay_ = yapOutput_ = nullptr;
       yapLifecycle_.stopped();
       break;
     case State::RestoringShell:
       restoreYapDesktop();
       yapLifecycle_.restored();
-      showYapRuntimeResult(runningPackage_, lastYapResult_);
+      if (!lastYapResult_.exitedByApp)
+        showYapRuntimeResult(runningPackage_, lastYapResult_);
       break;
   }
 }
@@ -877,6 +921,8 @@ void DesktopShell::openSettings() {
                     screenSaverEnabled_ ? tr("On", "Включена")
                                         : tr("Off", "Выключена"),
                     207, settingsScreenSaverEvent);
+  createSettingsRow(content,LV_SYMBOL_FILE,tr("Default apps","Приложения по умолчанию"),
+                    tr("Reset file associations","Сброс выбора приложений"),258,associationResetEvent);
 }
 
 void DesktopShell::openDisplaySettings() {
@@ -1785,7 +1831,7 @@ void DesktopShell::resetScreenSaverStar(ScreenSaverStar& star,
 
 void DesktopShell::initializeScreenSaverStars() {
   delete[] screenSaverStars_;
-  screenSaverStars_ = new ScreenSaverStar[SCREEN_SAVER_STAR_COUNT];
+  screenSaverStars_ = new (std::nothrow) ScreenSaverStar[SCREEN_SAVER_STAR_COUNT];
   if (!screenSaverStars_) return;
   for (uint8_t index = 0; index < SCREEN_SAVER_STAR_COUNT; ++index)
     resetScreenSaverStar(screenSaverStars_[index], true);
@@ -2127,14 +2173,70 @@ void DesktopShell::fileEntryEvent(lv_event_t* event) {
     strlcpy(active_->currentPath_, entry.path, sizeof(active_->currentPath_));
     active_->filePage_ = 0;
     active_->openFiles();
-  } else if (StorageService::isImagePath(entry.path)) {
-    active_->openImage(entry.path);
   } else if (StorageService::isYapPath(entry.path)) {
+    active_->associatedDocument_[0]=0;
     active_->openYapPackage(entry.path);
   } else {
-    active_->showInfoDialog(active_->tr(
-        "No application is associated\nwith this file type yet.",
-        "Для этого типа файлов\nпока нет приложения."));
+    strlcpy(active_->associatedDocument_,entry.path,sizeof(active_->associatedDocument_));
+    active_->associationRequested_=true;
+  }
+}
+
+void DesktopShell::associationEvent(lv_event_t* event) {
+  active_->associationChoice_=static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(event)));
+}
+void DesktopShell::associationResetEvent(lv_event_t*) {
+  bool ok=active_->associations_.reset();
+  active_->showInfoDialog(ok ? active_->tr("File associations reset","Выбор приложений сброшен") : "nvs_error");
+}
+void DesktopShell::chooseAssociation(uint8_t index) {
+  if (index>=associations_.count()) return;
+  const auto& candidate=associations_.candidate(index);
+  if (!strcmp(candidate.path,"@viewer")) {
+    openImage(associatedDocument_); associatedDocument_[0]=0;
+  } else {
+    strlcpy(selectedYapPath_,candidate.path,sizeof(selectedYapPath_));
+    yapRunRequested_=true;
+  }
+}
+void DesktopShell::updateAssociations() {
+  if (associationRequested_) {
+    associationRequested_=false; associationChoice_=-1; associationRemember_=nullptr;
+    associations_.scan(associatedDocument_);
+    auto* content=createWindow(tr("Open with","Открыть с помощью"));
+    associationScanning_=true;
+    auto* label=lv_label_create(content); lv_label_set_text(label,tr("Checking applications...","Проверка приложений..."));
+    return;
+  }
+  if (associationScanning_) {
+    // A user may close the scan window; do not launch behind their back.
+    if (!window_) { associationScanning_=false; return; }
+    associations_.update();
+    if (associations_.scanning()) return;
+    associationScanning_=false;
+    int saved=associations_.defaultIndex();
+    if (saved>=0) { chooseAssociation(saved); return; }
+    if (associations_.count()==1 && !strcmp(associations_.candidate(0).path,"@viewer")) {
+      chooseAssociation(0); return;
+    }
+    auto* content=createWindow(tr("Open with","Открыть с помощью"));
+    lv_obj_add_flag(content,LV_OBJ_FLAG_SCROLLABLE); lv_obj_set_scroll_dir(content,LV_DIR_VER);
+    associationRemember_=lv_checkbox_create(content);
+    lv_checkbox_set_text(associationRemember_,tr("Always use this app","Всегда использовать"));
+    lv_obj_set_pos(associationRemember_,8,4);
+    for (uint8_t i=0;i<associations_.count();++i)
+      createButton(content,associations_.candidate(i).name,8,34+i*34,286,30,associationEvent,reinterpret_cast<void*>(static_cast<intptr_t>(i)));
+    if (!associations_.count() || associations_.truncated()) {
+      auto* label=lv_label_create(content); lv_obj_set_width(label,286);
+      lv_obj_set_pos(label,8,38+associations_.count()*34);
+      lv_label_set_text(label,associations_.truncated() ? tr("Registry limit: 64 files / 8 matches","Лимит: 64 файла / 8 приложений") : tr("No compatible application","Нет подходящего приложения"));
+    }
+  }
+  if (associationChoice_>=0) {
+    int choice=associationChoice_; associationChoice_=-1;
+    if (associationRemember_ && lv_obj_is_valid(associationRemember_) && lv_obj_has_state(associationRemember_,LV_STATE_CHECKED))
+      if (!associations_.remember(choice)) { showInfoDialog("nvs_error"); return; }
+    chooseAssociation(choice); associationRemember_=nullptr;
   }
 }
 

@@ -70,11 +70,14 @@ host-owned coroutine and yields at 1,000-instruction intervals. A burst between
 explicit waits is limited to 200,000 instructions / 250 ms active execution;
 these are not a wall-clock deadline for compilation or native C routines.
 `osesp32.sleep(1..60000)` allows long-lived apps and resets the burst budget on
-wake. `osesp32.ui.label(text)` copies at most 96 bytes. Neither API exposes
-LVGL, SD or native pointers. EXIT and detected SD removal close the entire VM.
+wake. External button/text/document waits also yield cooperatively. The API
+exposes fixed-capacity UI requests and opaque file tokens, never LVGL, SD paths
+or native pointers. EXIT closes the VM; detected SD removal invalidates handles
+and pauses for a system Retry/Close decision.
 
 `python3 tools/test_yap_runtime.py` passed real-runtime host tests with
-ASan/UBSan: 100 Hello runs, quota rejection, a loop inside pcall, syntax error,
-missing entry, timed sleep including clock wrap, cancellation, simulated SD
-removal/short reads and lifecycle transitions. Actual
+ASan/UBSan: 100 Hello runs and exits, quota/pcall limits, compile/entry errors,
+timed waits, packed resource demo, filesystem permissions/traversal, stale
+handles, journal cut phases, simulated removal/short reads, real package parser
+malformations and long-runtime clock/calendar cases. Actual
 ESP32 heap and screen restoration still require the lifecycle hardware guide.
