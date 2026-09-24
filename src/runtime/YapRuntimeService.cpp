@@ -112,6 +112,18 @@ void YapRuntimeService::instructionHook(lua_State* state, lua_Debug*) {
 int YapRuntimeService::setLabel(lua_State* state) {
   YapRuntimeService* runtime = active(state);
   if (!runtime || !runtime->activeResult_) return 0;
+  if (lua_type(state, 1) == LUA_TNUMBER) {
+    UiWidget* item = widget(state, UiKind::Label, 1);
+    const char* style = luaL_optstring(state, 7, "body");
+    if (!strcmp(style, "body")) item->style = 0;
+    else if (!strcmp(style, "title")) item->style = 1;
+    else if (!strcmp(style, "status")) item->style = 2;
+    else return luaL_error(state, "label style must be body, title or status");
+    ++runtime->uiVersion_;
+    return 0;
+  }
+  if (runtime->activePackage_.manifest.apiMinor>=2)
+    return luaL_error(state,"API 1.2 label requires id,text,x,y,width,height");
   const char* text = checkedText(state,1,96);
   size_t length=strlen(text);
   memcpy(runtime->activeResult_->label, text, length);
@@ -161,6 +173,17 @@ int YapRuntimeService::initializeLibraries(lua_State* state) {
   lua_pushcfunction(state, uiButton); lua_setfield(state, -2, "button");
   lua_pushcfunction(state, waitEvent); lua_setfield(state, -2, "wait");
   lua_pushcfunction(state, requestText); lua_setfield(state, -2, "text");
+  YapRuntimeService* runtime = active(state);
+  if (runtime && runtime->activePackage_.manifest.apiMinor >= 2) {
+    lua_pushcfunction(state, uiToggle); lua_setfield(state, -2, "toggle");
+    lua_pushcfunction(state, uiTextField); lua_setfield(state, -2, "text_field");
+    lua_pushcfunction(state, uiList); lua_setfield(state, -2, "list");
+    lua_pushcfunction(state, uiClear); lua_setfield(state, -2, "clear");
+    lua_pushcfunction(state, uiRemove); lua_setfield(state, -2, "remove");
+    lua_pushcfunction(state, uiValue); lua_setfield(state, -2, "value");
+    lua_pushcfunction(state, uiTimer); lua_setfield(state, -2, "timer");
+    lua_pushcfunction(state, requestConfirm); lua_setfield(state, -2, "confirm");
+  }
   lua_setfield(state, -2, "ui");
   lua_newtable(state);
   const char* operations[] = {"open","read","write","seek","size","flush","close","stat","list","mkdir"};
@@ -243,6 +266,11 @@ bool YapRuntimeService::start(const YapPackageInfo& package) {
   initialDocument_=0;
   eventHead_=eventCount_=0;
   for (auto& button:buttons_) button = {};
+  for (auto& item:widgets_) item = {};
+  for (auto& timer:timers_) timer = {};
+  widgetCount_=listRows_=0;
+  viewportWidth_=package.manifest.launchMode==YapLaunchMode::Windowed ? 300 : 320;
+  viewportHeight_=package.manifest.launchMode==YapLaunchMode::Windowed ? 148 : 240;
   ++uiVersion_;
   allocation_ = {};
   startedMs_ = millis();
@@ -297,10 +325,12 @@ void YapRuntimeService::update() {
   if (!running_) return;
   if (!storage_->mounted()) pauseStorage();
   if (storagePaused_) return;
+  pumpTimers();
   int arguments=0;
   if (request_!=Request::None) {
     if (request_==Request::Event && eventCount_) {
-      responseHandle_=events_[eventHead_]; eventHead_=(eventHead_+1)%8;
+      responseEvent_=events_[eventHead_]; eventHead_=(eventHead_+1)%MAX_UI_EVENTS;
+      responseHandle_=responseEvent_.id;
       --eventCount_; responseError_[0]=0; responseReady_=true;
     }
     if (!responseReady_) return;
@@ -422,16 +452,225 @@ int YapRuntimeService::fileCall(lua_State* state) {
   if (ok) { lua_pushboolean(state,true); return 1; }
   lua_pushnil(state); lua_pushstring(state,fs.error()); return 2;
 }
-int YapRuntimeService::uiButton(lua_State* state) {
-  int id=luaL_checkinteger(state,1);
-  if (id<1 || id>6) return luaL_error(state,"button id must be 1..6");
+YapRuntimeService::UiWidget* YapRuntimeService::findWidget(
+    YapRuntimeService* runtime, uint8_t id) {
+  if (!runtime || !id) return nullptr;
+  for (uint8_t index=0; index<runtime->widgetCount_; ++index)
+    if (runtime->widgets_[index].id==id) return &runtime->widgets_[index];
+  return nullptr;
+}
+
+YapRuntimeService::UiWidget* YapRuntimeService::widget(
+    lua_State* state, UiKind kind, int argumentOffset) {
   auto* runtime=active(state);
-  strlcpy(runtime->buttons_[id-1].text,checkedText(state,2,48),49);
+  if (!runtime || runtime->activePackage_.manifest.apiMinor<2)
+    luaL_error(state,"rich UI requires API 1.2");
+  const lua_Integer rawId=luaL_checkinteger(state,argumentOffset);
+  if (rawId<1 || rawId>255) luaL_error(state,"widget id must be 1..255");
+  const char* text=checkedText(state,argumentOffset+1,96);
+  const lua_Integer x=luaL_checkinteger(state,argumentOffset+2);
+  const lua_Integer y=luaL_checkinteger(state,argumentOffset+3);
+  const lua_Integer width=luaL_checkinteger(state,argumentOffset+4);
+  const lua_Integer height=luaL_checkinteger(state,argumentOffset+5);
+  if (x<0 || y<0 || width<8 || height<8 || x>runtime->viewportWidth_ ||
+      y>runtime->viewportHeight_ || width>runtime->viewportWidth_-x ||
+      height>runtime->viewportHeight_-y)
+    luaL_error(state,"widget geometry is outside the application viewport");
+  UiWidget* item=findWidget(runtime,static_cast<uint8_t>(rawId));
+  if (!item) {
+    if (runtime->widgetCount_==MAX_UI_WIDGETS)
+      luaL_error(state,"too many UI widgets");
+    item=&runtime->widgets_[runtime->widgetCount_++];
+  } else if (item->kind==UiKind::List) {
+    runtime->listRows_-=item->rowCount;
+  }
+  *item={}; item->id=static_cast<uint8_t>(rawId); item->kind=kind;
+  item->x=x; item->y=y; item->width=width; item->height=height;
+  strlcpy(item->text,text,sizeof(item->text));
+  return item;
+}
+
+int YapRuntimeService::uiButton(lua_State* state) {
+  auto* runtime=active(state);
+  if (lua_gettop(state)==2) {
+    if (runtime->activePackage_.manifest.apiMinor>=2)
+      return luaL_error(state,"API 1.2 button requires id,text,x,y,width,height");
+    int id=luaL_checkinteger(state,1);
+    if (id<1 || id>6) return luaL_error(state,"button id must be 1..6");
+    strlcpy(runtime->buttons_[id-1].text,checkedText(state,2,48),49);
+  } else {
+    widget(state,UiKind::Button,1);
+  }
   ++runtime->uiVersion_; return 0;
 }
+
+int YapRuntimeService::uiToggle(lua_State* state) {
+  auto* runtime=active(state);
+  if (!runtime || runtime->activePackage_.manifest.apiMinor<2)
+    return luaL_error(state,"rich UI requires API 1.2");
+  const lua_Integer id=luaL_checkinteger(state,1);
+  if (id<1 || id>255) return luaL_error(state,"widget id must be 1..255");
+  const char* text=checkedText(state,2,96);
+  const bool checked=lua_toboolean(state,3);
+  const lua_Integer x=luaL_checkinteger(state,4), y=luaL_checkinteger(state,5);
+  const lua_Integer width=luaL_checkinteger(state,6), height=luaL_checkinteger(state,7);
+  if (x<0 || y<0 || width<8 || height<8 || x>runtime->viewportWidth_ ||
+      y>runtime->viewportHeight_ || width>runtime->viewportWidth_-x ||
+      height>runtime->viewportHeight_-y)
+    return luaL_error(state,"widget geometry is outside the application viewport");
+  UiWidget* item=findWidget(runtime,static_cast<uint8_t>(id));
+  if (!item) {
+    if (runtime->widgetCount_==MAX_UI_WIDGETS) return luaL_error(state,"too many UI widgets");
+    item=&runtime->widgets_[runtime->widgetCount_++];
+  } else if (item->kind==UiKind::List) runtime->listRows_-=item->rowCount;
+  *item={}; item->id=static_cast<uint8_t>(id); item->kind=UiKind::Toggle;
+  item->x=x; item->y=y; item->width=width; item->height=height;
+  item->checked=checked; strlcpy(item->text,text,sizeof(item->text));
+  ++runtime->uiVersion_; return 0;
+}
+
+int YapRuntimeService::uiTextField(lua_State* state) {
+  auto* runtime=active(state); widget(state,UiKind::TextField,1);
+  ++runtime->uiVersion_; return 0;
+}
+
+int YapRuntimeService::uiList(lua_State* state) {
+  auto* runtime=active(state);
+  if (!runtime || runtime->activePackage_.manifest.apiMinor<2)
+    return luaL_error(state,"rich UI requires API 1.2");
+  const lua_Integer rawId=luaL_checkinteger(state,1);
+  if (rawId<1 || rawId>255) return luaL_error(state,"widget id must be 1..255");
+  luaL_checktype(state,2,LUA_TTABLE);
+  const size_t count=lua_rawlen(state,2);
+  if (count>UiWidget::MAX_ROWS) return luaL_error(state,"list has more than six rows");
+  const lua_Integer x=luaL_checkinteger(state,3), y=luaL_checkinteger(state,4);
+  const lua_Integer width=luaL_checkinteger(state,5), height=luaL_checkinteger(state,6);
+  if (x<0 || y<0 || width<32 || height<24 || x>runtime->viewportWidth_ ||
+      y>runtime->viewportHeight_ || width>runtime->viewportWidth_-x ||
+      height>runtime->viewportHeight_-y)
+    return luaL_error(state,"widget geometry is outside the application viewport");
+  UiWidget* item=findWidget(runtime,static_cast<uint8_t>(rawId));
+  const uint8_t previous=item && item->kind==UiKind::List ? item->rowCount : 0;
+  if (runtime->listRows_-previous+count>MAX_UI_LIST_ROWS)
+    return luaL_error(state,"too many UI list rows");
+  if (!item) {
+    if (runtime->widgetCount_==MAX_UI_WIDGETS) return luaL_error(state,"too many UI widgets");
+    item=&runtime->widgets_[runtime->widgetCount_++];
+  }
+  *item={}; item->id=rawId; item->kind=UiKind::List;
+  item->x=x; item->y=y; item->width=width; item->height=height;
+  item->rowCount=count; runtime->listRows_=runtime->listRows_-previous+count;
+  for (size_t index=0;index<count;++index) {
+    lua_rawgeti(state,2,index+1);
+    strlcpy(item->rows[index],checkedText(state,-1,32),sizeof(item->rows[index]));
+    lua_pop(state,1);
+  }
+  ++runtime->uiVersion_; return 0;
+}
+
+int YapRuntimeService::uiClear(lua_State* state) {
+  auto* runtime=active(state);
+  if (runtime->activePackage_.manifest.apiMinor<2) return luaL_error(state,"rich UI requires API 1.2");
+  for (auto& item:runtime->widgets_) item={};
+  for (auto& timer:runtime->timers_) timer={};
+  runtime->widgetCount_=runtime->listRows_=0;
+  runtime->eventHead_=runtime->eventCount_=0;
+  ++runtime->uiVersion_; return 0;
+}
+
+int YapRuntimeService::uiRemove(lua_State* state) {
+  auto* runtime=active(state); const lua_Integer id=luaL_checkinteger(state,1);
+  if (id<1 || id>255) return luaL_error(state,"widget id must be 1..255");
+  for (uint8_t index=0;index<runtime->widgetCount_;++index) if (runtime->widgets_[index].id==id) {
+    if (runtime->widgets_[index].kind==UiKind::List) runtime->listRows_-=runtime->widgets_[index].rowCount;
+    for (uint8_t move=index+1;move<runtime->widgetCount_;++move)
+      runtime->widgets_[move-1]=runtime->widgets_[move];
+    runtime->widgets_[--runtime->widgetCount_]={}; ++runtime->uiVersion_;
+    lua_pushboolean(state,true); return 1;
+  }
+  lua_pushboolean(state,false); return 1;
+}
+
+int YapRuntimeService::uiValue(lua_State* state) {
+  const lua_Integer id=luaL_checkinteger(state,1);
+  if (id<1 || id>255) return luaL_error(state,"widget id must be 1..255");
+  auto* item=findWidget(active(state),static_cast<uint8_t>(id));
+  if (!item) { lua_pushnil(state); lua_pushliteral(state,"not_found"); return 2; }
+  if (item->kind==UiKind::Toggle) lua_pushboolean(state,item->checked);
+  else if (item->kind==UiKind::List) lua_pushinteger(state,item->selected);
+  else lua_pushstring(state,item->text);
+  return 1;
+}
+
+int YapRuntimeService::uiTimer(lua_State* state) {
+  auto* runtime=active(state); const lua_Integer id=luaL_checkinteger(state,1);
+  const lua_Integer interval=luaL_checkinteger(state,2); const bool repeat=lua_toboolean(state,3);
+  if (id<1 || id>255) return luaL_error(state,"timer id must be 1..255");
+  UiTimer* available=nullptr;
+  for (auto& timer:runtime->timers_) {
+    if (timer.id==id) { available=&timer; break; }
+    if (!timer.id && !available) available=&timer;
+  }
+  if (!interval) {
+    if (available && available->id==id) *available={};
+    return 0;
+  }
+  if (interval<50 || interval>60000) return luaL_error(state,"timer interval must be 50..60000 ms or zero");
+  if (!available) return luaL_error(state,"too many UI timers");
+  available->id=id; available->interval=interval; available->repeat=repeat;
+  available->due=millis()+interval; return 0;
+}
+
 void YapRuntimeService::postEvent(uint8_t id) {
-  if (!running_ || storagePaused_ || id<1 || id>6 || !*buttons_[id-1].text || eventCount_==8) return;
-  events_[(eventHead_+eventCount_)%8]=id; ++eventCount_;
+  if (!running_ || storagePaused_ || id<1 || id>6 || !*buttons_[id-1].text) return;
+  postUiEvent(id,UiEventKind::Tap);
+}
+
+void YapRuntimeService::postUiEvent(uint8_t id, UiEventKind kind, int16_t value,
+                                    const char* text) {
+  if (!running_ || storagePaused_ || !id || eventCount_==MAX_UI_EVENTS) return;
+  UiWidget* item=findWidget(this,id);
+  if (kind!=UiEventKind::Timer && richUi() && !item) return;
+  if (item && kind==UiEventKind::Change) {
+    if (item->kind==UiKind::Toggle) item->checked=value!=0;
+    if (item->kind==UiKind::List) { item->selected=value; ++uiVersion_; }
+    if (item->kind==UiKind::TextField && text) {
+      strlcpy(item->text,text,sizeof(item->text)); ++uiVersion_;
+    }
+  }
+  UiEvent& queued=events_[(eventHead_+eventCount_)%MAX_UI_EVENTS];
+  queued={}; queued.id=id; queued.kind=kind; queued.value=value;
+  if (text) strlcpy(queued.text,text,sizeof(queued.text));
+  ++eventCount_;
+}
+
+bool YapRuntimeService::setWidgetText(uint8_t id,const char* text) {
+  UiWidget* item=findWidget(this,id);
+  if (!item || item->kind!=UiKind::TextField || !text || strlen(text)>96) return false;
+  strlcpy(item->text,text,sizeof(item->text)); ++uiVersion_; return true;
+}
+
+const char* YapRuntimeService::eventName(UiEventKind kind) {
+  switch (kind) {
+    case UiEventKind::Tap: return "tap";
+    case UiEventKind::Change: return "change";
+    case UiEventKind::Hold: return "hold";
+    case UiEventKind::SwipeLeft: return "swipe_left";
+    case UiEventKind::SwipeRight: return "swipe_right";
+    case UiEventKind::SwipeUp: return "swipe_up";
+    case UiEventKind::SwipeDown: return "swipe_down";
+    case UiEventKind::Timer: return "timer";
+  }
+  return "tap";
+}
+
+void YapRuntimeService::pumpTimers() {
+  const uint32_t now=millis();
+  for (auto& timer:timers_) if (timer.id && deadlineReached(now,timer.due)) {
+    postUiEvent(timer.id,UiEventKind::Timer);
+    if (timer.repeat) timer.due=now+timer.interval;
+    else timer={};
+  }
 }
 int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
   auto* runtime=active(state);
@@ -439,9 +678,22 @@ int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
   if (*runtime->responseError_) {
     lua_pushnil(state); lua_pushstring(state,runtime->responseError_); return 2;
   }
-  if (static_cast<Request>(context)==Request::Text) lua_pushstring(state,runtime->responseText_);
-  else lua_pushinteger(state,runtime->responseHandle_);
-  return 1;
+  const Request request=static_cast<Request>(context);
+  if (request==Request::Text) { lua_pushstring(state,runtime->responseText_); return 1; }
+  if (request==Request::Confirm) { lua_pushboolean(state,runtime->responseHandle_!=0); return 1; }
+  if (request==Request::Event) {
+    lua_pushinteger(state,runtime->responseEvent_.id);
+    lua_pushstring(state,eventName(runtime->responseEvent_.kind));
+    UiWidget* item=findWidget(runtime,runtime->responseEvent_.id);
+    if (runtime->responseEvent_.text[0]) lua_pushstring(state,runtime->responseEvent_.text);
+    else if (runtime->responseEvent_.kind==UiEventKind::Change && item && item->kind==UiKind::Toggle)
+      lua_pushboolean(state,runtime->responseEvent_.value!=0);
+    else if (runtime->responseEvent_.kind==UiEventKind::Change)
+      lua_pushinteger(state,runtime->responseEvent_.value);
+    else lua_pushnil(state);
+    return 3;
+  }
+  lua_pushinteger(state,runtime->responseHandle_); return 1;
 }
 int YapRuntimeService::makeRequest(lua_State* state,Request request,const char* text) {
   auto* runtime=active(state);
@@ -453,6 +705,9 @@ int YapRuntimeService::makeRequest(lua_State* state,Request request,const char* 
 }
 int YapRuntimeService::waitEvent(lua_State* state) { return makeRequest(state,Request::Event,nullptr); }
 int YapRuntimeService::requestText(lua_State* state) { return makeRequest(state,Request::Text,checkedText(state,1,96)); }
+int YapRuntimeService::requestConfirm(lua_State* state) {
+  return makeRequest(state,Request::Confirm,checkedText(state,1,96));
+}
 int YapRuntimeService::requestOpen(lua_State* state) {
   if (!(active(state)->activePackage_.manifest.capabilities&YapDocumentsOpen)) {
     lua_pushnil(state); lua_pushliteral(state,"permission_denied"); return 2;

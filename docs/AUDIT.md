@@ -1,6 +1,6 @@
 # Project audit
 
-Audit date: 2026-09-23. Scope: board/kernel/services/UI/shell/runtime sources,
+Audit date: 2026-09-24. Scope: board/kernel/services/UI/shell/runtime sources,
 Arduino/PlatformIO configuration, packaging tools, examples, automated tests and
 all architecture/roadmap documentation. This audit distinguishes host/build
 evidence from behavior that still needs the ESP32-2432S028.
@@ -8,19 +8,21 @@ evidence from behavior that still needs the ESP32-2432S028.
 ## Outcome
 
 Stage 4 is code-complete. No known P0/P1 source defect remains after the fixes
-below. It is not hardware-accepted: display/touch, real FAT interruption,
+below. Stage 5 work packages 1 and 2 have started without waiving the remaining
+Stage 4 gates. Stage 4 is not hardware-accepted: display/touch, real FAT interruption,
 removal/reinsertion and heap-fragmentation checks cannot be proved by a desktop
 compiler or mocked filesystem. Do not begin Stage 5 feature work until the
 Stage 4 checklist has been recorded on the board.
 
-Current reproducible build after the audit:
+Current reproducible build after API 1.2:
 
-- static RAM: 92,484 bytes / 327,680 (28.2%);
-- flash: 972,753 bytes / 1,835,008 (53.0%);
+- static RAM: 101,036 bytes / 327,680 (30.8%);
+- flash: 979,753 bytes / 1,835,008 (53.4%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
-- native YAP bounds: four files, 512-byte operations, six buttons/eight events.
+- native YAP bounds: four files, 512-byte operations, 24 API 1.2 widgets,
+  12 aggregate list rows, four timers and eight events.
 
 These are linker figures, not live heap measurements. Rebuild figures may move
 slightly with toolchain/library versions; LovyanGFX is now pinned at 1.2.28 and
@@ -43,6 +45,7 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Heap allocation sites used throwing `new` despite embedded no-exception expectations. | Notes, wallpaper decoder, screen saver and SD LVGL adapters use `std::nothrow` and existing failure paths. |
 | P2 | Generated Python bytecode was tracked in Git. | Removed the recoverable generated cache and ignored `__pycache__/`/`*.py[cod]`. |
 | P2 | Documentation described implemented work as future and omitted failure semantics. | Added `YAP_API.md`; updated roadmap, architecture, project map, YAP1, Stage 4 and README. |
+| P2 | Application UI was limited to six fixed buttons and one output label. | Added versioned API 1.2 host-owned widgets, fixed geometry/count/text limits, queued rich events, confirmations/timers and a reference Calculator without exposing LVGL. |
 
 ## Remaining risks and debt
 
@@ -85,7 +88,8 @@ application storage, clock and vendored Lua with ASan/UBSan. It covers malformed
 packages with repaired CRCs, 100 launches + 100 exits, quota/pcall limits,
 UTF-8/traversal, package resource bounds, exact capabilities, handle exhaustion,
 stale handles after a different generation, interrupted transaction phases,
-text/button/document requests and the real packed round-trip demo.
+text/button/document requests, API 1.2 widget bounds/events/confirmation and
+the real packed round-trip demo.
 
 Python tests cover deterministic pack/inspect, resource paths, supported API,
 mandatory/overlapping/unknown sections and every example package. PlatformIO
@@ -94,6 +98,8 @@ consistency; it does not mark the hardware checklist passed.
 
 ## Stage decision
 
-Implementation gate: **passed**. Hardware acceptance gate: **open**. The next
-work item is the on-device Stage 4 matrix, followed by fixes for any physical
-regressions. Stage 5 begins only after those results are recorded.
+Stage 4 implementation gate: **passed**. Its full hardware acceptance gate is
+still **open**. The Stage 5 SDK template is verified on the board; API 1.2 and
+Calculator are host/build verified and require the next target check. Canvas
+work starts only after that result is recorded, while any failed Stage 4 check
+continues to take priority.

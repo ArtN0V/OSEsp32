@@ -110,8 +110,12 @@ bytes to a system-owned label; no LVGL pointers or UI callbacks reach Lua.
 `osesp32.exit()` yields permanently and requests successful termination. It
 does not return to Lua, even through pcall; the host closes the VM and restores
 the desktop without opening the diagnostic report. Saving or confirmation
-belongs before this call. Six system-owned buttons emit bounded queued IDs;
-Lua awaits them through `ui.wait()` instead of running inside LVGL callbacks.
+belongs before this call. Six API 1.0/1.1 system-owned buttons emit bounded
+queued IDs. API 1.2 adds a fixed native model of at most 24
+labels/buttons/toggles/text fields/lists, 12 aggregate list rows, four
+cooperative timers and eight queued events. Integer IDs cross the boundary;
+LVGL pointers do not. Lua awaits all input through `ui.wait()` instead of
+running inside LVGL callbacks.
 Text/file requests suspend the coroutine; response allocation occurs inside
 protected `lua_resume`, so an OOM response cannot panic outside Lua's boundary.
 
@@ -348,8 +352,10 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 ## Stage 4 limits and trust assumptions
 
 See `YAP_API.md` for the exact callable contract. No arbitrary GUI tree or native
-canvas is exposed yet. Six buttons, eight queued IDs, four handles and 512-byte
-transfers bound native memory independently of Lua's quota. Files can grow to
+canvas is exposed yet. API 1.2 is bounded to 24 host-owned widgets, 12 aggregate
+list rows, four timers and eight queued events; API 1.0/1.1 retains its six
+fixed buttons. Four handles and 512-byte transfers bound native memory
+independently of Lua's quota. Files can grow to
 1 MiB with 128 KiB card reserve; append copies at most 4 KiB synchronously.
 Larger rewrites are streamed to a different destination with explicit waits.
 

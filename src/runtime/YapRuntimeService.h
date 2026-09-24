@@ -42,8 +42,35 @@ struct YapRuntimeResult {
 
 class YapRuntimeService {
  public:
-  enum class Request : uint8_t { None, Event, Text, Open, Save };
+  enum class Request : uint8_t { None, Event, Text, Open, Save, Confirm };
+  enum class UiKind : uint8_t { None, Label, Button, Toggle, TextField, List };
+  enum class UiEventKind : uint8_t {
+    Tap,
+    Change,
+    Hold,
+    SwipeLeft,
+    SwipeRight,
+    SwipeUp,
+    SwipeDown,
+    Timer,
+  };
   struct Button { char text[49] = {}; };
+  struct UiWidget {
+    static constexpr uint8_t MAX_ROWS = 6;
+    uint8_t id = 0;
+    UiKind kind = UiKind::None;
+    int16_t x = 0, y = 0, width = 0, height = 0;
+    uint8_t style = 0;
+    bool checked = false;
+    int16_t selected = 0;
+    char text[97] = {};
+    uint8_t rowCount = 0;
+    char rows[MAX_ROWS][33] = {};
+  };
+  static constexpr uint8_t MAX_UI_WIDGETS = 24;
+  static constexpr uint8_t MAX_UI_EVENTS = 8;
+  static constexpr uint8_t MAX_UI_TIMERS = 4;
+  static constexpr uint8_t MAX_UI_LIST_ROWS = 12;
   static constexpr uint32_t MAX_SOURCE_SIZE = 64u * 1024u;
   static constexpr uint32_t INSTRUCTION_BUDGET = 200000;
   static constexpr uint32_t TIME_BUDGET_MS = 250;
@@ -61,8 +88,16 @@ class YapRuntimeService {
   Request request() const { return request_; }
   const char* requestText() const { return requestText_; }
   const Button* buttons() const { return buttons_; }
+  const UiWidget* widgets() const { return widgets_; }
+  uint8_t widgetCount() const { return widgetCount_; }
+  uint16_t viewportWidth() const { return viewportWidth_; }
+  uint16_t viewportHeight() const { return viewportHeight_; }
+  bool richUi() const { return activePackage_.manifest.apiMinor >= 2; }
   uint32_t uiVersion() const { return uiVersion_; }
   void postEvent(uint8_t id);
+  void postUiEvent(uint8_t id, UiEventKind kind, int16_t value = 0,
+                   const char* text = nullptr);
+  bool setWidgetText(uint8_t id, const char* text);
   void reply(const char* text, int handle = 0, const char* error = nullptr);
   AppStorageService& files() { return files_; }
   void pauseStorage();
@@ -107,20 +142,47 @@ class YapRuntimeService {
   AppStorageService files_;
   YapPackageInfo activePackage_;
   Button buttons_[6];
-  uint8_t events_[8] = {}, eventHead_ = 0, eventCount_ = 0;
+  struct UiEvent {
+    uint8_t id = 0;
+    UiEventKind kind = UiEventKind::Tap;
+    int16_t value = 0;
+    char text[97] = {};
+  };
+  struct UiTimer {
+    uint8_t id = 0;
+    bool repeat = false;
+    uint32_t interval = 0;
+    uint32_t due = 0;
+  };
+  UiWidget widgets_[MAX_UI_WIDGETS];
+  UiTimer timers_[MAX_UI_TIMERS];
+  uint8_t widgetCount_ = 0;
+  uint8_t listRows_ = 0;
+  uint16_t viewportWidth_ = 320, viewportHeight_ = 240;
+  UiEvent events_[MAX_UI_EVENTS];
+  uint8_t eventHead_ = 0, eventCount_ = 0;
   uint32_t uiVersion_ = 0;
   Request request_ = Request::None;
   char requestText_[97] = {};
   char responseText_[193] = {};
   char responseError_[33] = {};
   int responseHandle_ = 0;
+  UiEvent responseEvent_;
   bool responseReady_ = false, storagePaused_ = false;
   int initialDocument_=0;
   static int currentDocument(lua_State* state);
   static int fileCall(lua_State* state);
   static int uiButton(lua_State* state);
+  static int uiToggle(lua_State* state);
+  static int uiTextField(lua_State* state);
+  static int uiList(lua_State* state);
+  static int uiClear(lua_State* state);
+  static int uiRemove(lua_State* state);
+  static int uiValue(lua_State* state);
+  static int uiTimer(lua_State* state);
   static int waitEvent(lua_State* state);
   static int requestText(lua_State* state);
+  static int requestConfirm(lua_State* state);
   static int requestOpen(lua_State* state);
   static int requestSave(lua_State* state);
   static int continueRequest(lua_State* state, int status, intptr_t context);
@@ -136,6 +198,10 @@ class YapRuntimeService {
   static void instructionHook(lua_State* state, lua_Debug* debug);
   static int initializeLibraries(lua_State* state);
   static int setLabel(lua_State* state);
+  static UiWidget* widget(lua_State* state, UiKind kind, int argumentOffset);
+  static UiWidget* findWidget(YapRuntimeService* runtime, uint8_t id);
+  static const char* eventName(UiEventKind kind);
+  void pumpTimers();
   static YapRuntimeService* active(lua_State* state);
   static void copyLuaError(lua_State* state, YapRuntimeResult& result,
                            const char* fallback);

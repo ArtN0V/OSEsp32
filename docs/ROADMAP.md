@@ -94,7 +94,8 @@ objects must remain in real RAM. See [STAGE_4.md](STAGE_4.md).
 
 ## Stage 5 — desktop SDK
 
-Status: **Work package 1 implemented; template hardware check pending**. Basic `file_roundtrip.yap`
+Status: **Work package 1 accepted; work package 2 implemented and awaiting its
+Calculator hardware check**. Basic `file_roundtrip.yap`
 and `document_info.yap` operation has been reported on the target board. The
 remaining Stage 4 SD-removal, transaction interruption and long endurance
 checks stay open and are not silently waived by starting SDK work.
@@ -102,10 +103,11 @@ checks stay open and are not silently waived by starting SDK work.
 1. Provide a cross-platform project template and one-command `new`, `check`,
    `build` and `inspect` workflow with deterministic output and actionable
    permission/resource summaries. **Implemented and host-tested; generated
-   `sdk_template.yap` still needs one target-board launch.**
+   `sdk_template.yap` runs on the target board.**
 2. Freeze an additive API 1.2 UI object model: bounded labels, buttons, toggle,
    list and text fields; stable integer IDs; scrolling; confirmation dialogs;
    queued tap/hold/swipe/timer events. Lua never receives LVGL objects.
+   **Implemented and host/build-tested; Calculator target check pending.**
 3. Measure a system-owned native Canvas in exclusive mode. Compare RGB565,
    indexed 8-bit and indexed 4-bit storage using both free heap and largest
    block. Redraw only dirty rectangles. Do not add a second full-screen buffer

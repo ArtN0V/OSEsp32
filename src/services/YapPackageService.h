@@ -78,7 +78,7 @@ class YapPackageService {
  public:
   static constexpr uint16_t FORMAT_VERSION = 1;
   static constexpr uint8_t API_MAJOR = 1;
-  static constexpr uint8_t API_MINOR = 1;
+  static constexpr uint8_t API_MINOR = 2;
   static constexpr uint32_t MIN_MEMORY = 16u * 1024u;
   static constexpr uint32_t MAX_MEMORY = 96u * 1024u;
   static constexpr uint32_t MAX_PACKAGE_SIZE = 8u * 1024u * 1024u;

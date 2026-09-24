@@ -33,8 +33,8 @@ proven diagnostic UI remains available as a recovery mode.
 - Recovery hardware diagnostics for display, touch, SD, RGB LED, speaker,
   light sensor and memory/stress testing.
 - Sandboxed `.yap` applications with fixed Lua memory/CPU budgets, package
-  resources, private data, system Open/Save, text input, file associations and
-  recoverable transactional document writes.
+  resources, private data, system Open/Save, text input, file associations,
+  recoverable transactional document writes and a bounded API 1.2 widget model.
 
 ## Arduino IDE setup
 
@@ -202,7 +202,8 @@ Run `python tools/build_yap_examples.py` to create Hello plus controlled
 compile-error, missing-entry, out-of-memory and infinite-loop packages. Their
 expected results are documented in
 [examples/yap_runtime_tests/README.md](examples/yap_runtime_tests/README.md).
-The same command creates `file_roundtrip.yap` and `document_info.yap`.
+The same command creates `file_roundtrip.yap`, `document_info.yap` and
+`calculator.yap`.
 Applications can show six OS-owned buttons, wait for queued taps, request the
 shared English/Russian keyboard, stream named package resources, keep private
 `data:/` files and request exact user-document handles through system Open/Save
@@ -251,6 +252,14 @@ resources and sizes. `build` produces a deterministic package under the
 project's `build` directory. The starter uses a packaged resource, two queued
 buttons and app-controlled exit. See [Stage 5](docs/STAGE_5.md) and the
 [YAP API](docs/YAP_API.md).
+
+API 1.2 adds bounded labels, buttons, toggles, text fields, scrollable lists,
+confirmation dialogs, timers and queued tap/change/hold/swipe events. Build the
+fullscreen reference Calculator with:
+
+```text
+python tools/yap.py build examples/calculator_yap -o build/calculator.yap
+```
 
 ### Date, time and screen saver
 
@@ -317,7 +326,7 @@ docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 docs/STAGE_5.md           SDK, UI API, Canvas, Paint and reference-app gates
-docs/YAP_API.md           callable YAP 1.1 API, limits and failure semantics
+docs/YAP_API.md           callable YAP 1.0–1.2 API, limits and failure semantics
 ```
 
 ## Safety

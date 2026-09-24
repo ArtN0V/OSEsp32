@@ -14,8 +14,9 @@ called out explicitly and must not be mistaken for implemented code.
 - The custom system keyboard passed its initial on-board visibility and input
   check and now serves Notes through an adapter. Repetition, close, rotation and
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
-- Stage 5 Work package 1 has started: the project template and high-level
-  `tools/yap.py` workflow are implemented. Canvas/UI API 1.2 are not implemented.
+- Stage 5 Work package 1 is accepted on hardware. Work package 2's bounded UI
+  API 1.2 and Calculator are implemented; Calculator hardware acceptance and
+  the Canvas memory spike remain open.
 
 ## Boot and update flow
 
@@ -57,13 +58,14 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
 | `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
-| `src/ui/YapUiHost.*` | YAP buttons, text dialog, file picker and SD Retry/Close | Sole LVGL owner; shared SystemKeyboard adapter; callbacks only queue actions. |
-| `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM with host-owned coroutine | start/update/stop; count-hook yields, sleep and complete teardown; no LVGL ownership. |
+| `src/ui/YapUiHost.*` | Bounded YAP widgets, keyboard/confirmation dialogs, file picker and SD Retry/Close | Sole LVGL owner; callbacks only queue IDs/events and never execute Lua. |
+| `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI model/event/timer queues | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
 | `src/vendor/lua549/*` | Pinned official Lua 5.4.9 core and selected safe libraries | Reproducibly installed by `tools/install_lua.py`; 32-bit number configuration. |
 | `tools/yap.py` | High-level cross-platform SDK CLI | Creates without overwrite; check/build/inspect delegate to deterministic `yap_pack.py`. |
 | `templates/yap_app/*` | Valid API 1.1 starter application | Package resource, queued buttons and app-controlled exit; no capabilities by default. |
+| `examples/calculator_yap/*` | API 1.2 reference Calculator | Fullscreen, no capabilities, system widgets only, owns its visible Exit button. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |

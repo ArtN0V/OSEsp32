@@ -1,11 +1,14 @@
-# OSEsp32 YAP API 1.1
+# OSEsp32 YAP API 1.2
 
-API 1.0 packages remain valid. New apps should declare `"api_minor": 1`.
+API 1.0 and 1.1 packages remain valid. Applications using the bounded widget
+model must declare `"api_minor": 2`.
 Lua 5.4.9 uses 32-bit integers/floats and one host-owned coroutine. All APIs
 below are under `osesp32`. No native pointers, LVGL objects, paths from user
 pickers, io/os/debug/package or Lua-created coroutines are exposed.
 
 ## Execution and UI
+
+### API 1.0/1.1 compatibility UI
 
 | Call | Contract |
 |---|---|
@@ -15,6 +18,40 @@ pickers, io/os/debug/package or Lua-created coroutines are exposed.
 | `ui.text(initial)` | System keyboard dialog; initial <=96 bytes, result <=64 characters/192 bytes; cancel returns nil, `cancelled`. |
 | `sleep(ms)` | Yield for 1..60000 ms, reset active-execution budget after wake. |
 | `exit()` | End the application immediately; never returns, even inside pcall. Save first. |
+
+### API 1.2 bounded widgets
+
+API 1.2 applications use viewport coordinates. A windowed application receives
+300x148 pixels below the OS title bar; fullscreen and exclusive applications
+receive 320x240. Geometry outside that viewport raises a Lua error. The host
+owns every LVGL object; Lua sees only IDs from 1 through 255.
+
+| Call | Contract |
+|---|---|
+| `ui.clear()` | Remove all app widgets and timers and discard queued UI events. |
+| `ui.label(id,text,x,y,w,h[,style])` | Create/update a label; 96 UTF-8 bytes. Style is `body`, `title` or `status`. |
+| `ui.button(id,text,x,y,w,h)` | Create/update a tappable button; 96-byte caption. |
+| `ui.toggle(id,text,value,x,y,w,h)` | Labeled boolean switch. |
+| `ui.text_field(id,text,x,y,w,h)` | One-line 96-byte field; tapping opens the shared system keyboard. |
+| `ui.list(id,rows,x,y,w,h)` | Scrollable list of at most six 32-byte rows; selection values are one-based. |
+| `ui.value(id)` | Current text, boolean toggle state or selected list row; missing ID returns `nil,not_found`. |
+| `ui.remove(id)` | Remove a widget; returns whether it existed. |
+| `ui.timer(id,ms,repeat)` | Add/update one of four timers, 50..60000 ms; zero removes it. |
+| `ui.confirm(text)` | System Yes/No dialog; yields and returns a boolean. |
+| `ui.wait()` | Yields and returns `id,event,value`; legacy code reading only `id` remains valid. |
+
+The fixed limits are 24 widgets, 12 list rows across all lists, four timers and
+eight queued events. Updating an existing ID replaces its kind and contents.
+Event names are `tap`, `change`, `hold`, `swipe_left`, `swipe_right`,
+`swipe_up`, `swipe_down` and `timer`. Toggle changes return a boolean, text
+fields return their string, list changes return a one-based row, and events
+without a value return nil. A full queue drops new input rather than allocating.
+Timer delivery is cooperative and may be late while native SD/display work is
+in progress; it is not a real-time clock.
+
+Do not mix the API 1.0/1.1 fixed output/button layout with the API 1.2 widget
+layout in one package. Old packages remain compatible because their declared
+minor version selects the old host layout.
 
 There are no Lua callbacks inside LVGL. Shell-owned widgets never escape into
 the VM. Text/event/document waits reset the burst budget only after an external
@@ -56,7 +93,7 @@ UTF-8, empty components, reserved FAT characters and trailing spaces/dots fail.
 Private read and write require separate manifest capabilities. Append requires
 both. Resources are always readable without private permission. A write handle
 can read its own staged bytes, not the old destination. There is no delete or
-rename API in 1.1. Abnormal exit and ordinary exit discard uncommitted writes.
+rename API through 1.2. Abnormal exit and ordinary exit discard uncommitted writes.
 Open handles must be explicitly closed to commit. Larger transfer loops should
 call sleep(1) between 512-byte chunks; native SD calls cannot be preempted.
 
@@ -116,4 +153,4 @@ choices and are reset via Settings → Default apps. CRC/app ID is not a signatu
 packages claiming the same ID share private data. Install trusted apps only.
 
 Examples: `examples/file_roundtrip_yap`, `examples/document_info_yap`.
-Stage 5 adds Canvas/Paint and richer SDK, not general SD-backed RAM.
+Stage 5 adds Canvas/Paint next, not general SD-backed RAM.

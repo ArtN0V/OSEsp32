@@ -233,6 +233,43 @@ int main(int argc,char** argv) {
   runtime.update(); runtime.update(); runtime.reply(nullptr,0,"cancelled"); drain();
   assert(runtime.result().status==YapRuntimeStatus::Success);
 
+  package.manifest.apiMinor=2;
+  package.manifest.launchMode=YapLaunchMode::Fullscreen;
+  assert(start("function main() local u=osesp32.ui; u.clear(); "
+    "u.label(100,'Display',0,0,100,24,'status'); u.button(1,'One',0,28,60,28); "
+    "u.toggle(2,'Flag',true,64,28,100,28); u.text_field(3,'Text',0,60,120,28); "
+    "u.list(4,{'A','B'},124,60,120,60); assert(u.value(2)==true); "
+    "local id,kind=u.wait(); assert(id==1 and kind=='tap'); "
+    "assert(u.confirm('Continue?')==true); osesp32.exit() end"));
+  runtime.update(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Event);
+  assert(runtime.widgetCount()==5 && runtime.viewportWidth()==320);
+  runtime.postUiEvent(1,YapRuntimeService::UiEventKind::Tap); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Confirm);
+  runtime.reply(nullptr,1); drain(); assert(runtime.result().exitedByApp);
+  assert(start("function main() local u=osesp32.ui; u.toggle(2,'Flag',false,0,0,100,28); "
+    "u.text_field(3,'Old',0,30,100,28); u.list(4,{'A','B'},0,60,100,60); "
+    "local i,k,v=u.wait(); assert(i==2 and k=='change' and v==true and u.value(2)==true); "
+    "i,k,v=u.wait(); assert(i==3 and k=='change' and v=='Новый' and u.value(3)=='Новый'); "
+    "i,k,v=u.wait(); assert(i==4 and k=='change' and v==2 and u.value(4)==2); osesp32.exit() end"));
+  runtime.update(); runtime.update();
+  runtime.postUiEvent(2,YapRuntimeService::UiEventKind::Change,1); runtime.update();
+  runtime.postUiEvent(3,YapRuntimeService::UiEventKind::Change,0,"Новый"); runtime.update();
+  runtime.postUiEvent(4,YapRuntimeService::UiEventKind::Change,2); drain();
+  assert(runtime.result().exitedByApp);
+  assert(start("function main() osesp32.ui.timer(9,50,false); local i,k=osesp32.ui.wait(); "
+    "assert(i==9 and k=='timer') end"));
+  runtime.update(); runtime.update(); testMillis+=50; drain();
+  assert(runtime.result().status==YapRuntimeStatus::Success);
+  assert(start("function main() osesp32.ui.button(1,'Bad',319,0,20,20) end"));
+  drain(); assert(runtime.result().status==YapRuntimeStatus::ExecutionError);
+  assert(start("function main() for i=1,25 do osesp32.ui.button(i,'X',0,0,20,20) end end"));
+  drain(); assert(runtime.result().status==YapRuntimeStatus::ExecutionError);
+  assert(start("function main() osesp32.ui.list(1,{'1','2','3','4','5','6','7'},0,0,80,80) end"));
+  drain(); assert(runtime.result().status==YapRuntimeStatus::ExecutionError);
+  package.manifest.apiMinor=1;
+  package.manifest.launchMode=YapLaunchMode::Windowed;
+
   AppStorageService fs;
   fs.begin(storage,package);
   const char* invalid[]={"../x","/x","a//b","a/./b","a/../b","a.","a ","a\\b","\xc0\xaf","\xed\xa0\x80","\xf4\x90\x80\x80","\xe2\x82"};

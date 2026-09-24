@@ -1,0 +1,10 @@
+{
+  "id": "org.osesp32.calculator",
+  "name": "Calculator",
+  "api_minor": 2,
+  "entry": "main",
+  "mode": "fullscreen",
+  "memory": 32768,
+  "capabilities": [],
+  "associations": []
+}

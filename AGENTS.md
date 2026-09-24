@@ -31,10 +31,10 @@ Development rules:
 Current priorities: finish the Stage 4 hardware acceptance matrix in
 docs/STAGE_4.md and implement Stage 5 in the ordered work packages from
 docs/STAGE_5.md. Do not let new SDK work waive an open hardware gate.
-The code-complete slice includes AppStorageService, YapUiHost, system document
-pickers and FileAssociationService. Read docs/YAP_API.md before runtime changes.
-Lua receives queued button IDs, not callbacks or pointers; all file handles are
-session capabilities. Never recover transaction slots while a live session owns
+The code-complete slice includes AppStorageService, the bounded API 1.2 UI
+model/YapUiHost, system document pickers and FileAssociationService. Read
+docs/YAP_API.md before runtime changes. Lua receives queued integer IDs/events,
+not callbacks or pointers; all file handles are session capabilities. Never recover transaction slots while a live session owns
 them: first invalidate handles and pause, then recover on explicit Retry.
 Run tools/test_yap_runtime.py after runtime/storage changes; it tests actual Lua,
 package parser and AppStorageService with ASan/UBSan and mocked physical I/O.

@@ -718,6 +718,8 @@ void DesktopShell::prepareYapView() {
   lv_label_set_long_mode(yapOutput_,LV_LABEL_LONG_DOT);
   lv_obj_set_style_text_color(yapOutput_, lv_color_hex(0x202020), 0);
   lv_label_set_text(yapOutput_, tr("Starting...", "Запуск..."));
+  if (runningPackage_.manifest.apiMinor>=2)
+    lv_obj_add_flag(yapOutput_,LV_OBJ_FLAG_HIDDEN);
   systemKeyboard_.begin(lv_layer_top(),uiSmallFont(),kernel_->logger());
   yapUi_.begin(panel,yapRuntime_,storage_,systemKeyboard_,uiSmallFont(),
                language_==SystemLanguage::Russian,windowed ? 94 : 70);
