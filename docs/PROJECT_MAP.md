@@ -14,9 +14,9 @@ called out explicitly and must not be mistaken for implemented code.
 - The custom system keyboard passed its initial on-board visibility and input
   check and now serves Notes through an adapter. Repetition, close, rotation and
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
-- Stage 5 Work packages 1 and 2 are accepted on hardware. Work package 3's
-  exclusive API 1.3 Canvas probe is implemented and build-tested; RGB565/I8/I4
-  memory and timing measurements on the board remain open.
+- Stage 5 Work packages 1 and 2 are accepted on hardware. Work package 3 target
+  measurements select an indexed 4-bit Canvas for Paint: RGB565 cannot allocate
+  and I8 leaves too little contiguous memory. Ten-cycle endurance remains open.
 
 ## Boot and update flow
 
@@ -58,7 +58,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
 | `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
-| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers and the experimental system-owned Canvas probe | Sole LVGL owner; callbacks only queue IDs/events and never execute Lua; releases Canvas object and draw buffer together. |
+| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers and the experimental system-owned Canvas probe | Sole LVGL owner; presents the draw buffer through `lv_image`, explicitly evicts its cache entry, then releases object/buffer in order. |
 | `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI model/event/timer queues and Canvas-probe requests | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership or pixel arrays. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |

@@ -262,15 +262,18 @@ fullscreen reference Calculator with:
 python tools/yap.py build examples/calculator_yap -o build/calculator.yap
 ```
 
-Work package 3 measures a system-owned 320x204 Canvas before Paint's drawing
-API is finalized. Build the exclusive probe with:
+Work package 3 measured a system-owned 320x204 Canvas before Paint's drawing
+API is finalized. Target results reject RGB565 (`out_of_memory`) and I8 (only
+20,468 bytes in the largest remaining block) and select I4: a 32,704-byte
+buffer, 144,500 bytes free and a 49,140-byte largest block. Build the exclusive
+probe with:
 
 ```text
 python tools/yap.py build examples/canvas_probe_yap -o build/canvas_probe.yap
 ```
 
-Copy it to `/OSEsp32/Apps`, run RGB, I8 and I4, and press **FREE** after every
-result. Record the displayed heap/block/timing values and relaunch it ten times.
+Copy it to `/OSEsp32/Apps` and relaunch/release I4 ten times to complete the
+remaining endurance gate.
 This temporary API 1.3 probe uses one native buffer and dirty rectangles; it
 does not expose pixel memory to Lua. The exact checklist is in
 [Stage 5](docs/STAGE_5.md).

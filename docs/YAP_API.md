@@ -68,8 +68,8 @@ for emergency cancellation. Windowed apps also retain the system EXIT button.
 
 The probe exists to select a safe no-PSRAM pixel format on the real board. It
 is available only to packages declaring API 1.3 and `"mode": "exclusive"`.
-The system owns the LVGL Canvas and draw buffer; Lua receives measurements, not
-pixel tables, native pointers or arbitrary drawing access.
+The system owns the Canvas abstraction and LVGL draw buffer; Lua receives
+measurements, not pixel tables, native pointers or arbitrary drawing access.
 
 | Call | Contract |
 |---|---|

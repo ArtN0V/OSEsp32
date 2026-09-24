@@ -250,9 +250,10 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
   existing file type.
 - Pixel storage belongs to a native `Canvas` service. Lua sees drawing methods
   and events, never a table containing every pixel.
-- First preference is a memory-measured exclusive canvas: RGB565 only if a
-  safe contiguous allocation remains, otherwise an indexed canvas. A bounded
-  tile cache backed by `data:/tmp/` is a later fallback, not general swap.
+- Target measurements select one exclusive indexed 4-bit Canvas: a 32,704-byte
+  buffer and fixed 16-color palette. RGB565 cannot allocate, while indexed
+  8-bit leaves only a 20,468-byte largest block. A bounded tile cache backed by
+  `data:/tmp/` is a later fallback, not general swap.
 - The editor tracks a dirty flag. Close, SD removal and write failure preserve
   the in-memory drawing where possible and ask the user before discarding it.
 
@@ -262,8 +263,12 @@ mode, and `YapUiHost` owns its LVGL object and one 320x204 draw buffer. It tests
 RGB565, indexed 8-bit and indexed 4-bit with dirty rectangles and reports heap,
 largest-block and timing data. It provides no application drawing primitives,
 pixel pointer or Lua pixel table. Normal/emergency teardown and SD-removal
-paths release it before rebuilding the shell. The measured result, not API 1.3
-itself, decides the final Canvas service used by Paint.
+paths release it before rebuilding the shell. The measured result selects I4;
+the final additive Canvas API will preserve API 1.3 as a diagnostic contract.
+The display object is deliberately a plain `lv_image`, not LVGL 9.5.0's
+`lv_canvas`: the pinned Canvas destructor drops the wrong cache key. Explicit
+cache eviction before object/buffer destruction prevents stale references on
+repeated allocation without modifying the installed dependency.
 
 ## Stage 3 image policy
 

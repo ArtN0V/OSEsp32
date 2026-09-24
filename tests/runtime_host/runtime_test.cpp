@@ -269,18 +269,22 @@ int main(int argc,char** argv) {
   drain(); assert(runtime.result().status==YapRuntimeStatus::ExecutionError);
   package.manifest.apiMinor=3;
   package.manifest.launchMode=YapLaunchMode::Exclusive;
-  assert(start("function main() local c=osesp32.canvas; local s=assert(c.probe('i4')); "
+  assert(start("function main() local c=osesp32.canvas; for i=1,3 do "
+    "local s=assert(c.probe('i4')); "
     "assert(s.format=='i4' and s.buffer_bytes==32704 and s.frame_count==30); "
-    "s=assert(c.release()); assert(s.format=='released'); osesp32.exit() end"));
+    "s=assert(c.release()); assert(s.format=='released') end osesp32.exit() end"));
   runtime.update(); runtime.update();
-  assert(runtime.request()==YapRuntimeService::Request::CanvasProbe);
   YapRuntimeService::CanvasStats canvasStats;
-  strlcpy(canvasStats.format,"i4",sizeof(canvasStats.format));
-  canvasStats.bufferBytes=32704; canvasStats.frameCount=30;
-  runtime.replyCanvas(canvasStats); runtime.update();
-  assert(runtime.request()==YapRuntimeService::Request::CanvasRelease);
-  canvasStats={}; strlcpy(canvasStats.format,"released",sizeof(canvasStats.format));
-  runtime.replyCanvas(canvasStats); drain(); assert(runtime.result().exitedByApp);
+  for (uint8_t cycle=0;cycle<3;++cycle) {
+    assert(runtime.request()==YapRuntimeService::Request::CanvasProbe);
+    canvasStats={}; strlcpy(canvasStats.format,"i4",sizeof(canvasStats.format));
+    canvasStats.bufferBytes=32704; canvasStats.frameCount=30;
+    runtime.replyCanvas(canvasStats); runtime.update();
+    assert(runtime.request()==YapRuntimeService::Request::CanvasRelease);
+    canvasStats={}; strlcpy(canvasStats.format,"released",sizeof(canvasStats.format));
+    runtime.replyCanvas(canvasStats); runtime.update();
+  }
+  drain(); assert(runtime.result().exitedByApp);
   package.manifest.launchMode=YapLaunchMode::Windowed;
   assert(start("function main() local s,e=osesp32.canvas.probe('i8'); "
     "assert(s==nil and e=='exclusive_required') end"));

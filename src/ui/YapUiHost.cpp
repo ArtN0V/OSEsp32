@@ -1,6 +1,7 @@
 #include "YapUiHost.h"
 #include <strings.h>
 #include <esp_heap_caps.h>
+#include <misc/cache/instance/lv_image_cache.h>
 
 lv_obj_t* YapUiHost::button(lv_obj_t* parent,const char* text,int x,int y,int w,int action) {
   auto* b=lv_button_create(parent);
@@ -102,6 +103,11 @@ void YapUiHost::shutdown() {
 
 void YapUiHost::releaseCanvas() {
   canvasProbeActive_=false;
+  // LVGL 9.5.0's lv_canvas destructor drops the address of its draw-buffer
+  // pointer from the image cache instead of the draw buffer itself. Keep the
+  // system Canvas as an owned draw buffer shown by a plain image and always
+  // evict its real source before the buffer is freed.
+  if (canvasBuffer_) lv_image_cache_drop(canvasBuffer_);
   if (canvas_) lv_obj_delete(canvas_);
   canvas_=nullptr;
   if (canvasBuffer_) lv_draw_buf_destroy(canvasBuffer_);
@@ -146,7 +152,7 @@ void YapUiHost::beginCanvasProbe(const char* format) {
   canvasStats_.freeBefore=ESP.getFreeHeap();
   canvasStats_.largestBefore=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   const uint32_t allocationStarted=micros();
-  canvas_=lv_canvas_create(lv_obj_get_parent(widgetRoot_));
+  canvas_=lv_image_create(lv_obj_get_parent(widgetRoot_));
   canvasBuffer_=lv_draw_buf_create(320,204,canvasFormat_,LV_STRIDE_AUTO);
   canvasStats_.allocationUs=micros()-allocationStarted;
   if (!canvas_ || !canvasBuffer_) {
@@ -156,7 +162,8 @@ void YapUiHost::beginCanvasProbe(const char* format) {
     canvasStats_.minimumFree=canvasStats_.freeActive;
     runtime_->replyCanvas(canvasStats_,"out_of_memory"); return;
   }
-  lv_canvas_set_draw_buf(canvas_,canvasBuffer_);
+  lv_image_set_src(canvas_,canvasBuffer_);
+  lv_image_cache_drop(canvasBuffer_);
   lv_obj_set_pos(canvas_,0,0); lv_obj_set_size(canvas_,320,204);
   lv_obj_move_to_index(canvas_,0);
   if (canvasFormat_==LV_COLOR_FORMAT_I8) {

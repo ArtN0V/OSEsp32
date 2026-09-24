@@ -17,6 +17,9 @@ Build with:
 python tools/yap.py build examples/canvas_probe_yap -o build/canvas_probe.yap
 ```
 
-Run RGB, I8 and I4, press FREE after each result, and record both active and
-released free heap/largest block. Then exit and relaunch ten times. A successful
-host build is not a substitute for these board measurements.
+The initial board measurements rejected RGB565 (`out_of_memory`) and selected
+I4. The **10x** button now performs ten automatic I4 allocate/render/release
+cycles and reports the first and last released free heap/largest block. I8 and
+I4 remain available for individual measurements. After **10x**, exit normally,
+relaunch once and verify Calculator and `file_roundtrip.yap`. A successful host
+build is not a substitute for these board measurements.

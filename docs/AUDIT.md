@@ -18,7 +18,7 @@ completion of the separate Stage 4 checklist.
 Current reproducible build after the experimental API 1.3 Canvas probe:
 
 - static RAM: 101,180 bytes / 327,680 (30.9%);
-- flash: 982,969 bytes / 1,835,008 (53.6%);
+- flash: 982,829 bytes / 1,835,008 (53.6%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -50,14 +50,15 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Documentation described implemented work as future and omitted failure semantics. | Added `YAP_API.md`; updated roadmap, architecture, project map, YAP1, Stage 4 and README. |
 | P2 | Application UI was limited to six fixed buttons and one output label. | Added versioned API 1.2 host-owned widgets, fixed geometry/count/text limits, queued rich events, confirmations/timers and a reference Calculator without exposing LVGL. |
 | P1 | UI preparation queried the runtime before the new package had started, so it could use the previous app's API version. API 1.2 first opened blank and then poisoned the next API 1.1 launch after emergency exit. | `DesktopShell` now passes the inspected package's API/layout explicitly into `YapUiHost`; the selection is immutable for that foreground session. |
-| P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Added an exclusive, system-owned API 1.3 probe for RGB565/I8/I4 with real buffer size, heap/largest-block, fill and dirty-frame measurements; final format remains gated on target results. |
+| P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Target measurements reject RGB565 (`out_of_memory`) and I8 (20,468-byte largest block) and select I4 (144,500 bytes free, 49,140-byte largest block). |
+| P1 | Repeating I8/I4 usually closed the app on cycle two or three because LVGL 9.5.0 `lv_canvas` teardown could leave the real draw buffer cached after it was freed. | `YapUiHost` now uses a plain image as the buffer presenter, explicitly drops the buffer cache entry before ordered object/buffer destruction, and the probe provides an automatic ten-cycle I4 test. Target revalidation is pending. |
 
 ## Remaining risks and debt
 
 | Priority | Risk | Required action |
 |---|---|---|
 | P1 gate | No complete physical Stage 4 run exists for the current build. Host mocks cannot validate LVGL stacking, resistive-touch behavior, real SD controller failures or actual heap fragmentation. | Run every check in `STAGE_4.md`, including wallpaper/keyboard/exclusive cycles and live heap/largest-block baselines. |
-| P1 gate | Canvas allocation success alone does not establish a safe Paint format; live fragmentation and latency depend on the real board/session. | Run all three `canvas_probe.yap` formats, release each, repeat ten launches and record the Stage 5 table before freezing the drawing API. |
+| P1 gate | A single successful I4 run does not establish long-term restoration or fragmentation stability. | Repeat ten I4 launch/release/exit cycles, record the released baseline and then run Calculator and `file_roundtrip.yap`. |
 | P1 gate | FAT rename/flush is not power-fail atomic. Journals select an old or newly installed complete logical file, but card firmware/FAT metadata can still corrupt either. | Use disposable files for fault tests; verify power cuts at every phase on real media and retain external backups. |
 | P2 | Card generation proves an observed unmount/remount, not cryptographic volume identity. A rapid swap between 3-second probes or indistinguishable cloned card cannot be strongly identified. | Later store/compare a volume fingerprint or CID where the core exposes it; never shorten the current package revalidation on Retry. |
 | P2 | YAP CRC is corruption detection, not publisher authentication. IDs are self-declared; packages sharing an ID share private data. | Stage 6 installer/signature/identity policy. Until then install trusted packages only. |
@@ -106,6 +107,7 @@ consistency; it does not mark the hardware checklist passed.
 
 Stage 4 implementation gate: **passed**. Its full hardware acceptance gate is
 still **open**. Stage 5 Work packages 1 and 2 are accepted on the board. Work
-package 3's Canvas probe is implemented and host/build-tested; target memory,
-fragmentation and timing results are the next gate. Any failed Stage 4 check
-continues to take priority.
+package 3 target measurements reject RGB565, reject I8 for its 20,468-byte
+largest-block margin and select I4 with 144,500 bytes free and a 49,140-byte
+largest block. Ten-cycle Canvas endurance remains open before full Work package
+3 acceptance. Any failed Stage 4 check continues to take priority.

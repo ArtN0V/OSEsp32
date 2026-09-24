@@ -28,11 +28,11 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priorities: finish the Stage 4 hardware acceptance matrix in
-docs/STAGE_4.md and measure the Stage 5 Work package 3 Canvas probe on the
-target before choosing Paint's pixel format. Do not let new SDK work waive an
-open hardware gate. The temporary API 1.3 surface is diagnostic and must not be
-treated as Paint's final drawing API. The code-complete slice includes
+Current priorities: finish the Stage 4 hardware acceptance matrix, complete the
+ten-cycle I4 Canvas endurance check, and implement Stage 5 Work package 4 Paint
+using the target-selected indexed 4-bit native Canvas. Do not let new SDK work
+waive an open hardware gate. The temporary API 1.3 surface is diagnostic and
+must not be treated as Paint's final drawing API. The code-complete slice includes
 AppStorageService, the bounded API 1.2 UI
 model/YapUiHost, system document pickers and FileAssociationService. Read
 docs/YAP_API.md before runtime changes. Lua receives queued integer IDs/events,

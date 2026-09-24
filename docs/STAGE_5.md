@@ -1,9 +1,10 @@
 # Roadmap Stage 5 — YAP SDK, Canvas and reference applications
 
 Status: Work packages 1 and 2 are accepted on the target. Work package 3's
-Canvas probe is implemented and host/build-tested; its memory and timing results
-must now be recorded on the target. Stage 4's remaining physical gates continue
-in parallel; failed hardware checks take priority over new features.
+target measurements select indexed 4-bit Canvas for Paint; its repeated-launch
+endurance check remains open. Work package 4 is next. Stage 4's remaining
+physical gates continue in parallel; failed hardware checks take priority over
+new features.
 
 ## Goal
 
@@ -63,8 +64,8 @@ Measure, do not guess, three single-buffer candidates for a 320x204 app area:
 | Candidate | Pixel bytes | Main trade-off |
 |---|---:|---|
 | RGB565 | 130,560 | Direct color, likely too costly beside a useful Lua quota. |
-| Indexed 8-bit | 65,280 + 1,024 palette = 66,304 | Likely default; 256 colors and manageable RAM. |
-| Indexed 4-bit | 32,640 + 64 palette = 32,704 | Best margin; only 16 simultaneous colors. |
+| Indexed 8-bit | 65,280 + 1,024 palette = 66,304 | Works, but target largest block falls to an unsafe 20,468 bytes. |
+| Indexed 4-bit | 32,640 + 64 palette = 32,704 | **Selected:** safe margin with 16 simultaneous colors. |
 
 The Canvas is native and system-owned. Lua receives bounded drawing operations
 and touch coordinates, not pixel tables or memory pointers. Track dirty
@@ -81,7 +82,7 @@ maximum frame interval. `osesp32.canvas.release()` deletes both the LVGL object
 and its buffer and reports the recovered heap. This diagnostic contract is not
 the final Paint drawing API.
 
-Target check for work package 3:
+Initial target measurement procedure for work package 3:
 
 1. Upload the current firmware and copy `build/canvas_probe.yap` to
    `/OSEsp32/Apps`.
@@ -97,12 +98,38 @@ Target check for work package 3:
 
 | Format | Buffer B | Free active | Largest active | Minimum free | Alloc/fill us | Frame avg/max ms | Free/largest after FREE |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| RGB565 | pending | pending | pending | pending | pending | pending | pending |
-| I8 | pending | pending | pending | pending | pending | pending | pending |
-| I4 | pending | pending | pending | pending | pending | pending | pending |
+| RGB565 | allocation failed | — | — | — | — | — | 176,064 / 81,908 final baseline |
+| I8 | 66,304 | 108,596 | 20,468 | 108,000 | 705 / 41,814 | 25 / 26 | not separately recorded |
+| I4 | 32,704 | 144,500 | 49,140 | 143,896 | 547 / 48,370 | 25 / 26 | 176,064 / 81,908 final baseline |
 
-Exit: chosen Canvas survives repeated exclusive launch/exit with recorded free
-heap, minimum heap, largest block, frame latency and no desktop restoration leak.
+Measurements were photographed on the ESP32-2432S028 on 2026-09-24. RGB565
+returned `out_of_memory`. I8 rendered correctly but left only a 20,468-byte
+largest block, which is too fragile once BMP row buffers, file dialogs and save
+transactions are active. I4 preserved 35,904 more free bytes and a 28,672-byte
+larger contiguous block than I8. Its one-time full fill was 6,556 us slower,
+while the dirty-frame interval was identical. Paint therefore uses an I4 native
+Canvas with a fixed 16-color palette; imported BMP pixels are quantized to that
+palette and exported BMP pixels expand palette entries to 24-bit BGR. The final
+drawing API will be additive rather than changing the diagnostic API 1.3.
+
+The first endurance attempt exposed a lifecycle defect: starting I8 or I4
+again usually closed the application on the second or third allocation. LVGL
+9.5.0's `lv_canvas` destructor drops the address of its draw-buffer pointer
+from the image cache rather than the draw buffer source. That can retain a
+cache entry referring to freed pixel memory. OSEsp32 now displays its owned
+draw buffer through a plain `lv_image`, explicitly drops the real buffer from
+the cache, deletes the image, and only then destroys the buffer. It does not
+patch the installed LVGL library. Runtime host coverage now performs three
+consecutive probe/release continuations.
+
+Remaining exit gate: the selected I4 Canvas must survive ten repeated exclusive
+launch/exit cycles, followed by Calculator and `file_roundtrip.yap`, without a
+falling released baseline or failed desktop restoration.
+
+Retest the fix by uploading the current firmware, replacing
+`canvas_probe.yap`, pressing **10x** once and checking for `I4 stress 10x OK`.
+The displayed first and last `free`/`block` values should remain close. Then use
+**EXIT**, relaunch once, and run Calculator and `file_roundtrip.yap`.
 
 ## Work package 4 — Paint
 
