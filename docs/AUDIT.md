@@ -16,8 +16,8 @@ Stage 4 checklist has been recorded on the board.
 
 Current reproducible build after API 1.2:
 
-- static RAM: 101,036 bytes / 327,680 (30.8%);
-- flash: 979,753 bytes / 1,835,008 (53.4%);
+- static RAM: 101,044 bytes / 327,680 (30.8%);
+- flash: 979,801 bytes / 1,835,008 (53.4%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -46,6 +46,7 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Generated Python bytecode was tracked in Git. | Removed the recoverable generated cache and ignored `__pycache__/`/`*.py[cod]`. |
 | P2 | Documentation described implemented work as future and omitted failure semantics. | Added `YAP_API.md`; updated roadmap, architecture, project map, YAP1, Stage 4 and README. |
 | P2 | Application UI was limited to six fixed buttons and one output label. | Added versioned API 1.2 host-owned widgets, fixed geometry/count/text limits, queued rich events, confirmations/timers and a reference Calculator without exposing LVGL. |
+| P1 | UI preparation queried the runtime before the new package had started, so it could use the previous app's API version. API 1.2 first opened blank and then poisoned the next API 1.1 launch after emergency exit. | `DesktopShell` now passes the inspected package's API/layout explicitly into `YapUiHost`; the selection is immutable for that foreground session. |
 
 ## Remaining risks and debt
 

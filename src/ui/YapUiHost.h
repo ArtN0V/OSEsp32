@@ -6,8 +6,13 @@
 // LVGL callbacks only queue actions; update() performs all teardown/I/O.
 class YapUiHost {
  public:
+  // richUi/viewport come from the package being prepared. The runtime still
+  // contains the previous package until start(), so it is not authoritative
+  // while this object tree is created.
   void begin(lv_obj_t* parent, YapRuntimeService& runtime, StorageService& storage,
-             SystemKeyboard& keyboard, const lv_font_t* font, bool russian, int top);
+             SystemKeyboard& keyboard, const lv_font_t* font, bool russian,
+             int top, bool richUi, uint16_t viewportWidth,
+             uint16_t viewportHeight);
   void update();
   void shutdown();
   void storageLost();
@@ -20,7 +25,7 @@ class YapUiHost {
   StorageService* storage_=nullptr;
   SystemKeyboard* keyboard_=nullptr;
   const lv_font_t* font_=nullptr;
-  bool russian_=false, lost_=false, retry_=false, close_=false;
+  bool russian_=false, richUi_=false, lost_=false, retry_=false, close_=false;
   lv_obj_t* buttons_[6]={};
   lv_obj_t* widgetRoot_=nullptr;
   lv_obj_t* widgetObjects_[YapRuntimeService::MAX_UI_WIDGETS]={};

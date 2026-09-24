@@ -58,15 +58,17 @@ void YapUiHost::textEvent(lv_event_t* event) {
   self->action_=lv_event_get_code(event)==LV_EVENT_READY ? 11 : 12;
 }
 void YapUiHost::begin(lv_obj_t* parent,YapRuntimeService& runtime,StorageService& storage,
-                      SystemKeyboard& keyboard,const lv_font_t* font,bool russian,int top) {
+                      SystemKeyboard& keyboard,const lv_font_t* font,bool russian,int top,
+                      bool richUi,uint16_t viewportWidth,uint16_t viewportHeight) {
   shutdown(); runtime_=&runtime; storage_=&storage; keyboard_=&keyboard;
-  font_=font; russian_=russian; version_=UINT32_MAX; lost_=retry_=close_=false;
+  font_=font; russian_=russian; richUi_=richUi; version_=UINT32_MAX;
+  lost_=retry_=close_=false;
   fieldId_=0;
-  if (runtime.richUi()) {
+  if (richUi_) {
     widgetRoot_=lv_obj_create(parent);
-    const bool windowed=runtime.viewportWidth()==300;
+    const bool windowed=viewportWidth==300;
     lv_obj_set_pos(widgetRoot_,windowed ? 5 : 0,windowed ? 40 : 0);
-    lv_obj_set_size(widgetRoot_,runtime.viewportWidth(),runtime.viewportHeight());
+    lv_obj_set_size(widgetRoot_,viewportWidth,viewportHeight);
     lv_obj_set_style_pad_all(widgetRoot_,0,0); lv_obj_set_style_border_width(widgetRoot_,0,0);
     lv_obj_set_style_radius(widgetRoot_,0,0); lv_obj_set_style_bg_opa(widgetRoot_,LV_OPA_TRANSP,0);
     lv_obj_remove_flag(widgetRoot_,LV_OBJ_FLAG_SCROLLABLE);
@@ -93,7 +95,7 @@ void YapUiHost::shutdown() {
     widgetObjects_[index]=nullptr; widgetKinds_[index]=YapRuntimeService::UiKind::None;
     widgetRows_[index]=0;
   }
-  runtime_=nullptr; keyboard_=nullptr;
+  runtime_=nullptr; keyboard_=nullptr; richUi_=false;
 }
 
 void YapUiHost::rebuildWidgets() {
@@ -264,7 +266,7 @@ void YapUiHost::update() {
   }
   if (version_!=runtime_->uiVersion()) {
     version_=runtime_->uiVersion();
-    if (runtime_->richUi()) rebuildWidgets();
+    if (richUi_) rebuildWidgets();
     else for (int i=0;i<6;++i) {
         const char* text=runtime_->buttons()[i].text;
         lv_label_set_text(lv_obj_get_child(buttons_[i],0),text);

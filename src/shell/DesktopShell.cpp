@@ -722,7 +722,9 @@ void DesktopShell::prepareYapView() {
     lv_obj_add_flag(yapOutput_,LV_OBJ_FLAG_HIDDEN);
   systemKeyboard_.begin(lv_layer_top(),uiSmallFont(),kernel_->logger());
   yapUi_.begin(panel,yapRuntime_,storage_,systemKeyboard_,uiSmallFont(),
-               language_==SystemLanguage::Russian,windowed ? 94 : 70);
+               language_==SystemLanguage::Russian,windowed ? 94 : 70,
+               runningPackage_.manifest.apiMinor>=2,
+               windowed ? 300 : 320,windowed ? 148 : 240);
   yapHeapPrepared_ = ESP.getFreeHeap();
   yapBlockPrepared_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 }
