@@ -27,7 +27,6 @@ enum class ShellAppId : uint8_t {
   Settings,
   SystemInfo,
   Notes,
-  About,
 };
 
 enum class ScreenSaverMode : uint8_t {
@@ -196,7 +195,6 @@ class DesktopShell {
   void openKeyboardTest();
   void openNotes();
   void openNoteEditor(const char* path = nullptr);
-  void openAbout();
   void updateClock();
   void setTaskText(const char* text);
   void applyWallpaper();

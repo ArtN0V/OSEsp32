@@ -189,6 +189,11 @@ int YapRuntimeService::initializeLibraries(lua_State* state) {
     lua_newtable(state);
     lua_pushcfunction(state, requestCanvasProbe); lua_setfield(state, -2, "probe");
     lua_pushcfunction(state, requestCanvasRelease); lua_setfield(state, -2, "release");
+    if (runtime->activePackage_.manifest.apiMinor >= 4) {
+      lua_pushcfunction(state, requestCanvasCreate); lua_setfield(state, -2, "create");
+      lua_pushcfunction(state, requestCanvasClear); lua_setfield(state, -2, "clear");
+      lua_pushcfunction(state, requestCanvasLine); lua_setfield(state, -2, "line");
+    }
     lua_setfield(state, -2, "canvas");
   }
   lua_newtable(state);
@@ -269,6 +274,7 @@ bool YapRuntimeService::start(const YapPackageInfo& package) {
   sleeping_ = entryStarted_ = false;
   appExitRequested_ = false;
   request_=Request::None; responseReady_=storagePaused_=false;
+  canvasCommand_={};
   initialDocument_=0;
   eventHead_=eventCount_=0;
   for (auto& button:buttons_) button = {};
@@ -650,6 +656,16 @@ void YapRuntimeService::postUiEvent(uint8_t id, UiEventKind kind, int16_t value,
   ++eventCount_;
 }
 
+void YapRuntimeService::postCanvasEvent(UiEventKind kind, int16_t x, int16_t y) {
+  if (!running_ || storagePaused_ || activePackage_.manifest.apiMinor<4 ||
+      eventCount_==MAX_UI_EVENTS ||
+      (kind!=UiEventKind::CanvasDown && kind!=UiEventKind::CanvasMove &&
+       kind!=UiEventKind::CanvasUp)) return;
+  UiEvent& queued=events_[(eventHead_+eventCount_)%MAX_UI_EVENTS];
+  queued={}; queued.kind=kind; queued.value=x; queued.secondary=y;
+  ++eventCount_;
+}
+
 bool YapRuntimeService::setWidgetText(uint8_t id,const char* text) {
   UiWidget* item=findWidget(this,id);
   if (!item || item->kind!=UiKind::TextField || !text || strlen(text)>96) return false;
@@ -666,6 +682,9 @@ const char* YapRuntimeService::eventName(UiEventKind kind) {
     case UiEventKind::SwipeUp: return "swipe_up";
     case UiEventKind::SwipeDown: return "swipe_down";
     case UiEventKind::Timer: return "timer";
+    case UiEventKind::CanvasDown: return "canvas_down";
+    case UiEventKind::CanvasMove: return "canvas_move";
+    case UiEventKind::CanvasUp: return "canvas_up";
   }
   return "tap";
 }
@@ -707,6 +726,13 @@ int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
   if (request==Request::Event) {
     lua_pushinteger(state,runtime->responseEvent_.id);
     lua_pushstring(state,eventName(runtime->responseEvent_.kind));
+    if (runtime->responseEvent_.kind==UiEventKind::CanvasDown ||
+        runtime->responseEvent_.kind==UiEventKind::CanvasMove ||
+        runtime->responseEvent_.kind==UiEventKind::CanvasUp) {
+      lua_pushinteger(state,runtime->responseEvent_.value);
+      lua_pushinteger(state,runtime->responseEvent_.secondary);
+      return 4;
+    }
     UiWidget* item=findWidget(runtime,runtime->responseEvent_.id);
     if (runtime->responseEvent_.text[0]) lua_pushstring(state,runtime->responseEvent_.text);
     else if (runtime->responseEvent_.kind==UiEventKind::Change && item && item->kind==UiKind::Toggle)
@@ -715,6 +741,10 @@ int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
       lua_pushinteger(state,runtime->responseEvent_.value);
     else lua_pushnil(state);
     return 3;
+  }
+  if (request==Request::CanvasCreate || request==Request::CanvasClear ||
+      request==Request::CanvasLine) {
+    lua_pushboolean(state,1); return 1;
   }
   lua_pushinteger(state,runtime->responseHandle_); return 1;
 }
@@ -744,6 +774,42 @@ int YapRuntimeService::requestCanvasProbe(lua_State* state) {
 int YapRuntimeService::requestCanvasRelease(lua_State* state) {
   return makeRequest(state,Request::CanvasRelease,nullptr);
 }
+int YapRuntimeService::requestCanvasCreate(lua_State* state) {
+  auto* runtime=active(state);
+  if (runtime->activePackage_.manifest.launchMode!=YapLaunchMode::Exclusive) {
+    lua_pushnil(state); lua_pushliteral(state,"exclusive_required"); return 2;
+  }
+  const lua_Integer width=luaL_checkinteger(state,1);
+  const lua_Integer height=luaL_checkinteger(state,2);
+  if (width<16 || width>320 || height<16 || height>204)
+    return luaL_error(state,"canvas size must be 16..320 by 16..204");
+  runtime->canvasCommand_={};
+  runtime->canvasCommand_.width=width;
+  runtime->canvasCommand_.height=height;
+  return makeRequest(state,Request::CanvasCreate,nullptr);
+}
+int YapRuntimeService::requestCanvasClear(lua_State* state) {
+  auto* runtime=active(state);
+  const lua_Integer color=luaL_checkinteger(state,1);
+  if (color<0 || color>15) return luaL_error(state,"canvas color must be 0..15");
+  runtime->canvasCommand_={}; runtime->canvasCommand_.color=color;
+  return makeRequest(state,Request::CanvasClear,nullptr);
+}
+int YapRuntimeService::requestCanvasLine(lua_State* state) {
+  auto* runtime=active(state);
+  const lua_Integer x1=luaL_checkinteger(state,1), y1=luaL_checkinteger(state,2);
+  const lua_Integer x2=luaL_checkinteger(state,3), y2=luaL_checkinteger(state,4);
+  const lua_Integer color=luaL_checkinteger(state,5), thickness=luaL_checkinteger(state,6);
+  if (x1<0 || x1>319 || x2<0 || x2>319 || y1<0 || y1>203 || y2<0 || y2>203)
+    return luaL_error(state,"canvas line coordinates are out of range");
+  if (color<0 || color>15 || thickness<1 || thickness>9)
+    return luaL_error(state,"canvas line expects color 0..15 and thickness 1..9");
+  runtime->canvasCommand_={};
+  runtime->canvasCommand_.x1=x1; runtime->canvasCommand_.y1=y1;
+  runtime->canvasCommand_.x2=x2; runtime->canvasCommand_.y2=y2;
+  runtime->canvasCommand_.color=color; runtime->canvasCommand_.thickness=thickness;
+  return makeRequest(state,Request::CanvasLine,nullptr);
+}
 int YapRuntimeService::requestOpen(lua_State* state) {
   if (!(active(state)->activePackage_.manifest.capabilities&YapDocumentsOpen)) {
     lua_pushnil(state); lua_pushliteral(state,"permission_denied"); return 2;
@@ -767,6 +833,12 @@ void YapRuntimeService::reply(const char* text,int handle,const char* error) {
 void YapRuntimeService::replyCanvas(const CanvasStats& stats,const char* error) {
   if (request_!=Request::CanvasProbe && request_!=Request::CanvasRelease) return;
   responseCanvas_=stats;
+  strlcpy(responseError_,error ? error : "",sizeof(responseError_));
+  responseReady_=true;
+}
+void YapRuntimeService::replyCanvasCommand(const char* error) {
+  if (request_!=Request::CanvasCreate && request_!=Request::CanvasClear &&
+      request_!=Request::CanvasLine) return;
   strlcpy(responseError_,error ? error : "",sizeof(responseError_));
   responseReady_=true;
 }

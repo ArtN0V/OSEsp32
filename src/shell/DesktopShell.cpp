@@ -364,8 +364,8 @@ void DesktopShell::buildTaskbar() {
 
 void DesktopShell::buildStartMenu() {
   startMenu_ = lv_obj_create(screen_);
-  lv_obj_set_pos(startMenu_, 3, 31);
-  lv_obj_set_size(startMenu_, 174, 173);
+  lv_obj_set_pos(startMenu_, 3, 59);
+  lv_obj_set_size(startMenu_, 174, 145);
   configurePanel(startMenu_, 0x202B36, 4);
   lv_obj_set_style_border_width(startMenu_, 1, 0);
   lv_obj_set_style_border_color(startMenu_, lv_color_hex(0x607080), 0);
@@ -377,9 +377,8 @@ void DesktopShell::buildStartMenu() {
 
   const char* names[] = {tr("Files", "Файлы"), tr("Settings", "Настройки"),
                          tr("System Info", "Сведения о системе"),
-                         tr("Notes", "Заметки"),
-                         tr("About", "О системе")};
-  for (uint8_t index = 0; index < 5; ++index) {
+                         tr("Notes", "Заметки")};
+  for (uint8_t index = 0; index < 4; ++index) {
     createButton(startMenu_, names[index], 7, 28 + index * 28, 160, 25,
                  appButtonEvent,
                  reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
@@ -497,7 +496,6 @@ void DesktopShell::openApp(ShellAppId app) {
     case ShellAppId::Settings: openSettings(); break;
     case ShellAppId::SystemInfo: openSystemInfo(); break;
     case ShellAppId::Notes: openNotes(); break;
-    case ShellAppId::About: openAbout(); break;
   }
 }
 
@@ -1162,6 +1160,9 @@ void DesktopShell::openScreenSaverSettings() {
 
 void DesktopShell::openSystemInfo() {
   lv_obj_t* content = createWindow(tr("System Info", "Сведения о системе"));
+  lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(content, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
   const MemorySnapshot memory = kernel_->monitor().sample();
   char info[384];
   snprintf(info, sizeof(info), language_ == SystemLanguage::Russian
@@ -1193,6 +1194,25 @@ void DesktopShell::openSystemInfo() {
   createButton(content,
                tr("HARDWARE DIAGNOSTICS", "ДИАГНОСТИКА ОБОРУДОВАНИЯ"),
                42, 151, 220, 29, diagnosticsEvent);
+
+  lv_obj_t* aboutTitle = lv_label_create(content);
+  lv_label_set_text(aboutTitle, "OSEsp32 0.3");
+  lv_obj_set_pos(aboutTitle, 10, 194);
+  lv_obj_set_style_text_font(aboutTitle, &osesp32_font_16_bold, 0);
+  lv_obj_set_style_text_color(aboutTitle, lv_color_hex(COLOR_TITLE), 0);
+
+  lv_obj_t* aboutText = lv_label_create(content);
+  lv_label_set_text(aboutText, tr(
+      "Arduino-ESP32 + FreeRTOS + LVGL\n"
+      "ESP32-2432S028 / ILI9341 / XPT2046\n"
+      "External .yap applications: Stage 5",
+      "Arduino-ESP32 + FreeRTOS + LVGL\n"
+      "ESP32-2432S028 / ILI9341 / XPT2046\n"
+      "Внешние приложения .yap: этап 5"));
+  lv_obj_set_pos(aboutText, 10, 220);
+  lv_obj_set_width(aboutText, 278);
+  lv_label_set_long_mode(aboutText, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_font(aboutText, uiSmallFont(), 0);
 }
 
 void DesktopShell::openKeyboardTest() {
@@ -1460,21 +1480,6 @@ void DesktopShell::openNoteEditor(const char* path) {
   } else {
     hideNoteKeyboard();
   }
-}
-
-void DesktopShell::openAbout() {
-  lv_obj_t* content = createWindow(tr("About OSEsp32", "О системе OSEsp32"));
-  lv_obj_t* title = lv_label_create(content);
-  lv_label_set_text(title, tr("OSEsp32 0.3\nStorage and files preview",
-                              "OSEsp32 0.3\nХранилище и файлы"));
-  lv_obj_set_pos(title, 18, 14);
-  lv_obj_set_style_text_color(title, lv_color_hex(COLOR_TITLE), 0);
-
-  lv_obj_t* text = lv_label_create(content);
-  lv_label_set_text(text, tr(
-      "Arduino-ESP32 + FreeRTOS + LVGL\nESP32-2432S028 / ILI9341 / XPT2046\n\nExternal .yap applications: Stage 4",
-      "Arduino-ESP32 + FreeRTOS + LVGL\nESP32-2432S028 / ILI9341 / XPT2046\n\nВнешние приложения .yap: этап 4"));
-  lv_obj_set_pos(text, 18, 58);
 }
 
 void DesktopShell::updateClock() {

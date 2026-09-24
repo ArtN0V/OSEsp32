@@ -74,6 +74,7 @@ void YapUiHost::begin(lv_obj_t* parent,YapRuntimeService& runtime,StorageService
     lv_obj_set_style_pad_all(widgetRoot_,0,0); lv_obj_set_style_border_width(widgetRoot_,0,0);
     lv_obj_set_style_radius(widgetRoot_,0,0); lv_obj_set_style_bg_opa(widgetRoot_,LV_OPA_TRANSP,0);
     lv_obj_remove_flag(widgetRoot_,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(widgetRoot_,LV_OBJ_FLAG_CLICKABLE);
     return;
   }
   for (int i=0;i<6;++i) {
@@ -115,13 +116,15 @@ void YapUiHost::releaseCanvas() {
   canvas_=nullptr;
   if (canvasBuffer_) lv_draw_buf_destroy(canvasBuffer_);
   canvasBuffer_=nullptr; canvasFormat_=LV_COLOR_FORMAT_UNKNOWN;
+  canvasWidth_=canvasHeight_=0;
   canvasFramesIssued_=canvasFramesRecorded_=0;
   canvasPreviousX_=canvasPreviousY_=-1;
+  canvasTouchX_=canvasTouchY_=-1;
   if (hadCanvas) ResetDiagnostics::mark(ResetCheckpoint::CanvasReleased);
 }
 
 void YapUiHost::setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay) {
-  if (!canvasBuffer_ || x<0 || y<0 || x>=320 || y>=204) return;
+  if (!canvasBuffer_ || x<0 || y<0 || x>=canvasWidth_ || y>=canvasHeight_) return;
   uint8_t* pixel=static_cast<uint8_t*>(lv_draw_buf_goto_xy(canvasBuffer_,x,y));
   if (!pixel) return;
   if (canvasFormat_==LV_COLOR_FORMAT_RGB565) {
@@ -138,6 +141,16 @@ void YapUiHost::setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay) 
     if (x&1) *pixel=(*pixel&0xf0)|value;
     else *pixel=(*pixel&0x0f)|(value<<4);
   }
+}
+
+void YapUiHost::setCanvasIndexPixel(int16_t x,int16_t y,uint8_t color) {
+  if (!canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4 || x<0 || y<0 ||
+      x>=canvasWidth_ || y>=canvasHeight_) return;
+  uint8_t* pixel=static_cast<uint8_t*>(lv_draw_buf_goto_xy(canvasBuffer_,x,y));
+  if (!pixel) return;
+  color&=0x0f;
+  if (x&1) *pixel=(*pixel&0xf0)|color;
+  else *pixel=(*pixel&0x0f)|(color<<4);
 }
 
 void YapUiHost::paintCanvasRect(int16_t x,int16_t y,int16_t width,int16_t height,
@@ -159,6 +172,7 @@ void YapUiHost::beginCanvasProbe(const char* format) {
   const uint32_t allocationStarted=micros();
   canvas_=lv_image_create(lv_obj_get_parent(widgetRoot_));
   canvasBuffer_=lv_draw_buf_create(320,204,canvasFormat_,LV_STRIDE_AUTO);
+  canvasWidth_=320; canvasHeight_=204;
   canvasStats_.allocationUs=micros()-allocationStarted;
   if (!canvas_ || !canvasBuffer_) {
     releaseCanvas();
@@ -202,6 +216,97 @@ void YapUiHost::beginCanvasProbe(const char* format) {
   canvasFramesIssued_=canvasFramesRecorded_=0;
   canvasFrameTotalMs_=0; canvasStats_.maximumFrameMs=0;
   canvasPreviousX_=canvasPreviousY_=-1; canvasLastFrameMs_=millis();
+}
+
+bool YapUiHost::createDrawingCanvas(uint16_t width,uint16_t height) {
+  releaseCanvas();
+  canvasFormat_=LV_COLOR_FORMAT_I4;
+  canvasWidth_=width; canvasHeight_=height;
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasAllocate);
+  canvas_=lv_image_create(lv_obj_get_parent(widgetRoot_));
+  canvasBuffer_=lv_draw_buf_create(width,height,canvasFormat_,LV_STRIDE_AUTO);
+  if (!canvas_ || !canvasBuffer_) { releaseCanvas(); return false; }
+  static const uint32_t colors[16]={
+    0x101820,0xE74C3C,0x2ECC71,0x3498DB,0xF1C40F,0x9B59B6,0x1ABC9C,0xECF0F1,
+    0x7F8C8D,0xC0392B,0x27AE60,0x2980B9,0xF39C12,0x8E44AD,0x16A085,0xFFFFFF};
+  for (uint8_t index=0;index<16;++index) {
+    const uint32_t color=colors[index];
+    lv_draw_buf_set_palette(canvasBuffer_,index,lv_color32_make(
+        color>>16,(color>>8)&0xff,color&0xff,255));
+  }
+  lv_image_set_src(canvas_,canvasBuffer_);
+  lv_obj_set_pos(canvas_,0,0); lv_obj_set_size(canvas_,width,height);
+  lv_obj_move_to_index(canvas_,0);
+  lv_obj_add_flag(canvas_,LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(canvas_,LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_add_event_cb(canvas_,canvasEvent,LV_EVENT_ALL,this);
+  clearDrawingCanvas(15);
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasAnimate);
+  return true;
+}
+
+void YapUiHost::clearDrawingCanvas(uint8_t color) {
+  if (!canvas_ || !canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4) return;
+  uint8_t* pixels=static_cast<uint8_t*>(lv_draw_buf_goto_xy(canvasBuffer_,0,0));
+  if (!pixels) return;
+  memset(pixels,static_cast<uint8_t>((color<<4)|color),
+         canvasBuffer_->header.stride*canvasHeight_);
+  lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
+  lv_obj_invalidate(canvas_);
+}
+
+void YapUiHost::drawCanvasLine(const YapRuntimeService::CanvasCommand& command) {
+  if (!canvas_ || !canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4) return;
+  int x0=command.x1, y0=command.y1, x1=command.x2, y1=command.y2;
+  const int half=command.thickness/2;
+  const int dx=abs(x1-x0), stepX=x0<x1 ? 1 : -1;
+  const int dy=-abs(y1-y0), stepY=y0<y1 ? 1 : -1;
+  int error=dx+dy;
+  while (true) {
+    for (int y=y0-half;y<=y0+half;++y)
+      for (int x=x0-half;x<=x0+half;++x)
+        setCanvasIndexPixel(x,y,command.color);
+    if (x0==x1 && y0==y1) break;
+    const int doubled=2*error;
+    if (doubled>=dy) { error+=dy; x0+=stepX; }
+    if (doubled<=dx) { error+=dx; y0+=stepY; }
+  }
+  lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
+  lv_area_t objectArea; lv_obj_get_coords(canvas_,&objectArea);
+  const int left=max(0,min(command.x1,command.x2)-half);
+  const int top=max(0,min(command.y1,command.y2)-half);
+  const int right=min(static_cast<int>(canvasWidth_)-1,
+                      max(command.x1,command.x2)+half);
+  const int bottom=min(static_cast<int>(canvasHeight_)-1,
+                       max(command.y1,command.y2)+half);
+  lv_area_t dirty={
+    static_cast<int32_t>(objectArea.x1+left),
+    static_cast<int32_t>(objectArea.y1+top),
+    static_cast<int32_t>(objectArea.x1+right),
+    static_cast<int32_t>(objectArea.y1+bottom)};
+  lv_obj_invalidate_area(canvas_,&dirty);
+}
+
+void YapUiHost::canvasEvent(lv_event_t* event) {
+  auto* self=static_cast<YapUiHost*>(lv_event_get_user_data(event));
+  if (!self || !self->runtime_ || !self->canvas_) return;
+  const lv_event_code_t code=lv_event_get_code(event);
+  if (code!=LV_EVENT_PRESSED && code!=LV_EVENT_PRESSING && code!=LV_EVENT_RELEASED)
+    return;
+  lv_indev_t* input=lv_indev_active();
+  if (!input) return;
+  lv_point_t point; lv_indev_get_point(input,&point);
+  lv_area_t area; lv_obj_get_coords(self->canvas_,&area);
+  int16_t x=point.x-area.x1, y=point.y-area.y1;
+  x=constrain(x,0,static_cast<int16_t>(self->canvasWidth_-1));
+  y=constrain(y,0,static_cast<int16_t>(self->canvasHeight_-1));
+  if (code==LV_EVENT_PRESSING && x==self->canvasTouchX_ && y==self->canvasTouchY_) return;
+  self->canvasTouchX_=x; self->canvasTouchY_=y;
+  const auto kind=code==LV_EVENT_PRESSED ? YapRuntimeService::UiEventKind::CanvasDown
+      : code==LV_EVENT_RELEASED ? YapRuntimeService::UiEventKind::CanvasUp
+                               : YapRuntimeService::UiEventKind::CanvasMove;
+  self->runtime_->postCanvasEvent(kind,x,y);
+  if (code==LV_EVENT_RELEASED) self->canvasTouchX_=self->canvasTouchY_=-1;
 }
 
 void YapUiHost::updateCanvasProbe() {
@@ -488,6 +593,28 @@ void YapUiHost::update() {
     stats.freeActive=ESP.getFreeHeap();
     stats.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     stats.minimumFree=stats.freeActive; runtime_->replyCanvas(stats); return;
+  }
+  if (request==YapRuntimeService::Request::CanvasCreate) {
+    const auto& command=runtime_->canvasCommand();
+    runtime_->replyCanvasCommand(createDrawingCanvas(command.width,command.height)
+                                     ? nullptr : "out_of_memory");
+    return;
+  }
+  if (request==YapRuntimeService::Request::CanvasClear) {
+    if (!canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4)
+      runtime_->replyCanvasCommand("no_canvas");
+    else { clearDrawingCanvas(runtime_->canvasCommand().color); runtime_->replyCanvasCommand(); }
+    return;
+  }
+  if (request==YapRuntimeService::Request::CanvasLine) {
+    const auto& command=runtime_->canvasCommand();
+    if (!canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4)
+      runtime_->replyCanvasCommand("no_canvas");
+    else if (command.x1>=canvasWidth_ || command.x2>=canvasWidth_ ||
+             command.y1>=canvasHeight_ || command.y2>=canvasHeight_)
+      runtime_->replyCanvasCommand("outside_canvas");
+    else { drawCanvasLine(command); runtime_->replyCanvasCommand(); }
+    return;
   }
   if (request==YapRuntimeService::Request::Text) {
     newModal(tr("Text input","Ввод текста")); shown_=request;

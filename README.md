@@ -34,8 +34,8 @@ proven diagnostic UI remains available as a recovery mode.
   light sensor and memory/stress testing.
 - Sandboxed `.yap` applications with fixed Lua memory/CPU budgets, package
   resources, private data, system Open/Save, text input, file associations,
-  recoverable transactional document writes, a bounded API 1.2 widget model and
-  an exclusive API 1.3 Canvas measurement probe.
+  recoverable transactional document writes, a bounded API 1.2 widget model,
+  an exclusive API 1.3 Canvas probe and API 1.4 indexed drawing/touch.
 
 ## Arduino IDE setup
 
@@ -262,8 +262,8 @@ fullscreen reference Calculator with:
 python tools/yap.py build examples/calculator_yap -o build/calculator.yap
 ```
 
-Work package 3 measured a system-owned 320x204 Canvas before Paint's drawing
-API is finalized. Target results reject RGB565 (`out_of_memory`) and I8 (only
+Work package 3 measured a system-owned 320x204 Canvas. Target results reject
+RGB565 (`out_of_memory`) and I8 (only
 20,468 bytes in the largest remaining block) and select I4: a 32,704-byte
 buffer, 144,500 bytes free and a 49,140-byte largest block. Build the exclusive
 probe with:
@@ -280,6 +280,16 @@ application exit.
 This temporary API 1.3 probe uses one native buffer and dirty rectangles; it
 does not expose pixel memory to Lua. The exact checklist is in
 [Stage 5](docs/STAGE_5.md).
+
+The first API 1.4 Paint slice adds pencil, eraser, thickness, palette, clear,
+coordinate touch and dirty-exit confirmation. Build it with:
+
+```text
+python tools/yap.py build examples/paint_yap -o build/paint.yap
+```
+
+It intentionally has no BMP Open/Save yet; those transactional document paths
+are the next Work package 4 slice.
 
 ### Date, time and screen saver
 
@@ -346,7 +356,7 @@ docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 docs/STAGE_5.md           SDK, UI API, Canvas, Paint and reference-app gates
-docs/YAP_API.md           callable YAP 1.0–1.3 API, limits and failure semantics
+docs/YAP_API.md           callable YAP 1.0–1.4 API, limits and failure semantics
 ```
 
 ## Safety

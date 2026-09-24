@@ -297,6 +297,29 @@ int main(int argc,char** argv) {
   assert(start("function main() local s,e=osesp32.canvas.probe('i8'); "
     "assert(s==nil and e=='exclusive_required') end"));
   drain(); assert(runtime.result().status==YapRuntimeStatus::Success);
+  package.manifest.apiMinor=4;
+  package.manifest.launchMode=YapLaunchMode::Exclusive;
+  assert(start("function main() local c=osesp32.canvas; assert(c.create(320,176)); "
+    "assert(c.clear(15)); assert(c.line(1,2,30,40,3,5)); "
+    "local id,k,x,y=osesp32.ui.wait(); assert(id==0 and k=='canvas_down' and x==12 and y==34); "
+    "assert(c.release()); osesp32.exit() end"));
+  runtime.update(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasCreate);
+  assert(runtime.canvasCommand().width==320 && runtime.canvasCommand().height==176);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasClear);
+  assert(runtime.canvasCommand().color==15);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasLine);
+  assert(runtime.canvasCommand().x2==30 && runtime.canvasCommand().y2==40 &&
+         runtime.canvasCommand().color==3 && runtime.canvasCommand().thickness==5);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::Event);
+  runtime.postCanvasEvent(YapRuntimeService::UiEventKind::CanvasDown,12,34);
+  runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasRelease);
+  canvasStats={}; strlcpy(canvasStats.format,"released",sizeof(canvasStats.format));
+  runtime.replyCanvas(canvasStats); drain(); assert(runtime.result().exitedByApp);
   package.manifest.apiMinor=1;
   package.manifest.launchMode=YapLaunchMode::Windowed;
   package.manifest.requestedMemory=32768;

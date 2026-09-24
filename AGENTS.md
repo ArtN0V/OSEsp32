@@ -28,12 +28,11 @@ Development rules:
 - Update `docs/PROJECT_MAP.md`, `docs/ARCHITECTURE.md` and `docs/ROADMAP.md`
   whenever ownership, persistent formats or stage boundaries change.
 
-Current priorities: finish the Stage 4 hardware acceptance matrix, classify the
-random Canvas reset with System Info's retained reset reason/marker, complete
-the repeated I4 Canvas endurance check, and implement Stage 5 Work package 4 Paint
-using the target-selected indexed 4-bit native Canvas. Do not let new SDK work
-waive an open hardware gate. The temporary API 1.3 surface is diagnostic and
-must not be treated as Paint's final drawing API. The code-complete slice includes
+Current priorities: finish the Stage 4 hardware acceptance matrix and continue
+Stage 5 Work package 4 Paint with bounded BMP import/export plus document/SD
+recovery on top of the implemented API 1.4 drawing/touch slice. Do not let new
+SDK work waive an open hardware gate. API 1.3 remains diagnostic; Paint uses
+the additive API 1.4 I4 drawing surface. The code-complete slice includes
 AppStorageService, the bounded API 1.2 UI
 model/YapUiHost, system document pickers and FileAssociationService. Read
 docs/YAP_API.md before runtime changes. Lua receives queued integer IDs/events,

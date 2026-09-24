@@ -1,0 +1,10 @@
+{
+  "id": "org.osesp32.paint",
+  "name": "Paint",
+  "api_minor": 4,
+  "entry": "main",
+  "mode": "exclusive",
+  "memory": 24576,
+  "capabilities": [],
+  "associations": []
+}

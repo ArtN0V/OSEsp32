@@ -1,8 +1,8 @@
 # Roadmap Stage 5 — YAP SDK, Canvas and reference applications
 
-Status: Work packages 1 and 2 are accepted on the target. Work package 3's
-target measurements select indexed 4-bit Canvas for Paint; its repeated-launch
-endurance check remains open. Work package 4 is next. Stage 4's remaining
+Status: Work packages 1–3 are accepted on the target. Work package 4 has begun
+with the bounded API 1.4 I4 drawing/touch surface and a pencil/eraser Paint
+slice; BMP document Open/Save is next. Stage 4's remaining
 physical gates continue in parallel; failed hardware checks take priority over
 new features.
 
@@ -120,16 +120,17 @@ a plain `lv_image`. Since this build has both LVGL image caches disabled, releas
 first detaches the variable image source, deletes the image object, and only
 then destroys the buffer; it does not issue redundant cache operations.
 
-A later target run could still restart at a random I4/I8 allocation or release.
+A later target run still restarted at a random I4/I8 allocation or release.
 The identical 24 KiB Lua quota passes 64 probe/release continuations under the
-host sanitizers, so accumulating Lua response tables is not the cause. An
-RTC-backed reset breadcrumb now records allocate/fill/animate/release/released
-and **System Info** displays the ESP reset reason plus the previous marker. This
-diagnostic state is not user data and may be lost on complete power removal.
+host sanitizers, excluding accumulating Lua response tables. The image source
+is now detached before its descriptor storage is released, and the subsequent
+target retest was reported stable. An RTC-backed breadcrumb continues to record
+allocate/fill/animate/release/released; **System Info** displays the reset reason
+plus previous marker. This diagnostic state is not user data and may be lost on
+complete power removal.
 
-Remaining exit gate: the selected I4 Canvas must survive ten repeated exclusive
-launch/exit cycles, followed by Calculator and `file_roundtrip.yap`, without a
-falling released baseline or failed desktop restoration.
+The selected I4 Canvas endurance gate is accepted from the reported target
+retest. Calculator and `file_roundtrip.yap` remain useful regression checks.
 
 Retest by uploading the current firmware, replacing `canvas_probe.yap`, and
 pressing **10x** repeatedly. The displayed first and last `free`/`block` values
@@ -140,6 +141,11 @@ before removing power. Then use **EXIT**, run Calculator and
 `file_roundtrip.yap`.
 
 ## Work package 4 — Paint
+
+Implemented first slice: `canvas.create/clear/line`, coordinate down/move/up
+events, and `examples/paint_yap` with pencil, eraser, five thicknesses, eight
+palette choices, clear, dirty indication and unsaved-exit confirmation. It
+declares no storage capabilities yet. The following file/recovery slice remains:
 
 - Pencil, eraser, thickness, compact palette, clear and dirty indicator.
 - Incremental uncompressed BMP 16/24/32-bit read with strict headers/bounds.
@@ -184,9 +190,9 @@ hardware acceptance remain separate reports.
 
 1. `new → check → build → inspect` works in PowerShell and Bash without opening
    `.lua` through a file association.
-2. API 1.0/1.1 packages still run, API 1.2 bounds hold, the experimental API
-   1.3 Canvas probe remains exclusive-only, and unsupported future minors are
-   rejected.
+2. API 1.0/1.1 packages still run, API 1.2 bounds hold, the API 1.3 probe and
+   API 1.4 drawing Canvas remain exclusive-only, and unsupported future minors
+   are rejected.
 3. Calculator, YAP Notes, Paint, viewer and game run from `/OSEsp32/Apps`.
 4. Paint round-trips BMP and survives cancel, failed write, removal and replace.
 5. UI/Canvas limits fail with a controlled message, never corrupt shell state.

@@ -43,7 +43,8 @@ struct YapRuntimeResult {
 class YapRuntimeService {
  public:
   enum class Request : uint8_t {
-    None, Event, Text, Open, Save, Confirm, CanvasProbe, CanvasRelease
+    None, Event, Text, Open, Save, Confirm, CanvasProbe, CanvasRelease,
+    CanvasCreate, CanvasClear, CanvasLine
   };
   enum class UiKind : uint8_t { None, Label, Button, Toggle, TextField, List };
   enum class UiEventKind : uint8_t {
@@ -55,6 +56,9 @@ class YapRuntimeService {
     SwipeUp,
     SwipeDown,
     Timer,
+    CanvasDown,
+    CanvasMove,
+    CanvasUp,
   };
   struct Button { char text[49] = {}; };
   struct UiWidget {
@@ -82,6 +86,11 @@ class YapRuntimeService {
     uint16_t frameCount = 0;
     uint16_t averageFrameMs = 0;
     uint16_t maximumFrameMs = 0;
+  };
+  struct CanvasCommand {
+    uint16_t width = 0, height = 0;
+    int16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+    uint8_t color = 0, thickness = 1;
   };
   static constexpr uint8_t MAX_UI_WIDGETS = 24;
   static constexpr uint8_t MAX_UI_EVENTS = 8;
@@ -113,9 +122,12 @@ class YapRuntimeService {
   void postEvent(uint8_t id);
   void postUiEvent(uint8_t id, UiEventKind kind, int16_t value = 0,
                    const char* text = nullptr);
+  void postCanvasEvent(UiEventKind kind, int16_t x, int16_t y);
   bool setWidgetText(uint8_t id, const char* text);
   void reply(const char* text, int handle = 0, const char* error = nullptr);
   void replyCanvas(const CanvasStats& stats, const char* error = nullptr);
+  void replyCanvasCommand(const char* error = nullptr);
+  const CanvasCommand& canvasCommand() const { return canvasCommand_; }
   AppStorageService& files() { return files_; }
   void pauseStorage();
   void resumeStorage();
@@ -163,6 +175,7 @@ class YapRuntimeService {
     uint8_t id = 0;
     UiEventKind kind = UiEventKind::Tap;
     int16_t value = 0;
+    int16_t secondary = 0;
     char text[97] = {};
   };
   struct UiTimer {
@@ -186,6 +199,7 @@ class YapRuntimeService {
   int responseHandle_ = 0;
   UiEvent responseEvent_;
   CanvasStats responseCanvas_;
+  CanvasCommand canvasCommand_;
   bool responseReady_ = false, storagePaused_ = false;
   int initialDocument_=0;
   static int currentDocument(lua_State* state);
@@ -203,6 +217,9 @@ class YapRuntimeService {
   static int requestConfirm(lua_State* state);
   static int requestCanvasProbe(lua_State* state);
   static int requestCanvasRelease(lua_State* state);
+  static int requestCanvasCreate(lua_State* state);
+  static int requestCanvasClear(lua_State* state);
+  static int requestCanvasLine(lua_State* state);
   static int requestOpen(lua_State* state);
   static int requestSave(lua_State* state);
   static int continueRequest(lua_State* state, int status, intptr_t context);

@@ -8,17 +8,17 @@ evidence from behavior that still needs the ESP32-2432S028.
 ## Outcome
 
 Stage 4 is code-complete. No known P0/P1 source defect remains after the fixes
-below. Stage 5 work packages 1 and 2 are accepted on the board, and Work package
-3 has started without waiving the remaining
+below. Stage 5 work packages 1–3 are accepted on the board, and Work package 4
+has started without waiving the remaining
 Stage 4 gates. Stage 4 is not hardware-accepted: display/touch, real FAT interruption,
 removal/reinsertion and heap-fragmentation checks cannot be proved by a desktop
 compiler or mocked filesystem. New feature evidence must not be mistaken for
 completion of the separate Stage 4 checklist.
 
-Current reproducible build after the experimental API 1.3 Canvas probe:
+Current reproducible build after the first API 1.4 Paint slice:
 
-- static RAM: 101,180 bytes / 327,680 (30.9%);
-- flash: 982,829 bytes / 1,835,008 (53.6%);
+- static RAM: 101,220 bytes / 327,680 (30.9%);
+- flash: 985,865 bytes / 1,835,008 (53.7%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -26,6 +26,8 @@ Current reproducible build after the experimental API 1.3 Canvas probe:
   12 aggregate list rows, four timers and eight events.
 - Canvas probe: one exclusive 320x204 native buffer in RGB565/I8/I4, never a
   Lua pixel table or second full-size framebuffer.
+- Paint slice: one variable-size exclusive I4 Canvas, bounded clear/line
+  commands and coordinate touch events.
 
 These are linker figures, not live heap measurements. Rebuild figures may move
 slightly with toolchain/library versions; LovyanGFX is now pinned at 1.2.28 and
@@ -51,7 +53,7 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Application UI was limited to six fixed buttons and one output label. | Added versioned API 1.2 host-owned widgets, fixed geometry/count/text limits, queued rich events, confirmations/timers and a reference Calculator without exposing LVGL. |
 | P1 | UI preparation queried the runtime before the new package had started, so it could use the previous app's API version. API 1.2 first opened blank and then poisoned the next API 1.1 launch after emergency exit. | `DesktopShell` now passes the inspected package's API/layout explicitly into `YapUiHost`; the selection is immutable for that foreground session. |
 | P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Target measurements reject RGB565 (`out_of_memory`) and I8 (20,468-byte largest block) and select I4 (144,500 bytes free, 49,140-byte largest block). |
-| P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 probe/release continuations. RTC breadcrumbs plus the ESP reset reason are now visible in System Info; target classification/revalidation remains pending. |
+| P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 continuations, RTC reset breadcrumbs remain available, and the subsequent target retest was reported stable. |
 
 ## Remaining risks and debt
 
@@ -96,7 +98,8 @@ packages with repaired CRCs, 100 launches + 100 exits, quota/pcall limits,
 UTF-8/traversal, package resource bounds, exact capabilities, handle exhaustion,
 stale handles after a different generation, interrupted transaction phases,
 text/button/document requests, API 1.2 widget bounds/events/confirmation,
-API 1.3 Canvas request/release continuations and the real packed round-trip demo.
+API 1.3 Canvas request/release continuations, API 1.4 drawing/touch requests and
+the real packed round-trip demo.
 
 Python tests cover deterministic pack/inspect, resource paths, supported API,
 mandatory/overlapping/unknown sections and every example package. PlatformIO
@@ -106,9 +109,7 @@ consistency; it does not mark the hardware checklist passed.
 ## Stage decision
 
 Stage 4 implementation gate: **passed**. Its full hardware acceptance gate is
-still **open**. Stage 5 Work packages 1 and 2 are accepted on the board. Work
-package 3 target measurements reject RGB565, reject I8 for its 20,468-byte
-largest-block margin and select I4 with 144,500 bytes free and a 49,140-byte
-largest block. Random target resets during Canvas endurance remain open before
-full Work package 3 acceptance. Any failed Stage 4 check continues to take
+still **open**. Stage 5 Work packages 1–3 are accepted on the board. Work
+package 4 now has the first host/build-tested Paint drawing slice; BMP
+round-trip and SD recovery remain. Any failed Stage 4 check continues to take
 priority.

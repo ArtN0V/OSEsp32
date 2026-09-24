@@ -257,14 +257,13 @@ Paint uses the same public APIs expected of third-party `.yap` applications:
 - The editor tracks a dirty flag. Close, SD removal and write failure preserve
   the in-memory drawing where possible and ask the user before discarding it.
 
-The first implementation step is deliberately narrower than this target. The
-temporary API 1.3 `canvas.probe/release` pair is accepted only in exclusive
+The temporary API 1.3 `canvas.probe/release` pair remains accepted only in exclusive
 mode, and `YapUiHost` owns its LVGL object and one 320x204 draw buffer. It tests
 RGB565, indexed 8-bit and indexed 4-bit with dirty rectangles and reports heap,
-largest-block and timing data. It provides no application drawing primitives,
-pixel pointer or Lua pixel table. Normal/emergency teardown and SD-removal
-paths release it before rebuilding the shell. The measured result selects I4;
-the final additive Canvas API will preserve API 1.3 as a diagnostic contract.
+largest-block and timing data. API 1.4 adds a bounded I4-only drawing Canvas,
+clear/line commands and queued coordinate touch events. It still exposes no
+pixel pointer or Lua pixel table. Normal/emergency teardown and SD-removal paths
+release it before rebuilding the shell. API 1.3 stays a diagnostic contract.
 The display object is deliberately a plain `lv_image`, not LVGL 9.5.0's
 `lv_canvas`: the pinned Canvas destructor drops the wrong cache key. Both image
 caches are disabled in this build. Teardown detaches the variable image source,
@@ -375,8 +374,8 @@ power removal may erase it.
 See `YAP_API.md` for the exact callable contract. No arbitrary GUI tree or native
 pointer is exposed. API 1.2 is bounded to 24 host-owned widgets, 12 aggregate
 list rows, four timers and eight queued events; API 1.0/1.1 retains its six
-fixed buttons. Experimental API 1.3 exposes only an exclusive, system-owned
-Canvas measurement request; the final drawing contract remains unfrozen. Four
+fixed buttons. API 1.3 exposes the exclusive system-owned Canvas measurement;
+API 1.4 adds bounded I4 create/clear/line commands and coordinate touch events. Four
 handles and 512-byte transfers bound native memory
 independently of Lua's quota. Files can grow to
 1 MiB with 128 KiB card reserve; append copies at most 4 KiB synchronously.

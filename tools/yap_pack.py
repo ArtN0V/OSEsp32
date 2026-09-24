@@ -51,7 +51,7 @@ def validate_identifier(value: str) -> None:
 
 
 def build_manifest(config: dict, code_index: int) -> bytes:
-    if int(config.get("api_minor",0)) not in (0,1,2,3):
+    if int(config.get("api_minor",0)) not in (0,1,2,3,4):
         raise ValueError("unsupported API minor")
     app_id = str(config["id"])
     name = str(config["name"])
@@ -217,7 +217,7 @@ def inspect(path: Path, *, quiet: bool = False) -> None:
     if section_type != b"MANF" or len(manifest) != MANIFEST_SIZE:
         raise ValueError("invalid manifest section")
     magic,size,runtime,mode,major,minor,count,reserved,memory,caps,code,icon=struct.unpack_from('<4sHBBBBBBIIHH',manifest)
-    if (magic!=b'MNF1' or size!=160 or runtime!=1 or mode>2 or major!=1 or minor>3 or count>4 or reserved
+    if (magic!=b'MNF1' or size!=160 or runtime!=1 or mode>2 or major!=1 or minor>4 or count>4 or reserved
             or caps & ~31 or code>=section_count or types[code]!=b'LUAS'
             or (icon!=65535 and (icon>=section_count or types[icon]!=b'ICON'))):
         raise ValueError("invalid manifest fields")

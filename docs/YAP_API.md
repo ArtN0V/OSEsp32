@@ -1,9 +1,9 @@
-# OSEsp32 YAP API 1.3
+# OSEsp32 YAP API 1.4
 
 API 1.0 and 1.1 packages remain valid. Applications using the bounded widget
-model must declare `"api_minor": 2`. API 1.3 currently adds only the temporary
-exclusive Canvas measurement contract documented below; it is not yet the
-final Paint drawing API.
+model must declare `"api_minor": 2`. API 1.3 adds the temporary exclusive
+Canvas measurement contract. API 1.4 preserves that probe and adds the first
+bounded indexed drawing/touch contract used by Paint.
 Lua 5.4.9 uses 32-bit integers/floats and one host-owned coroutine. All APIs
 below are under `osesp32`. No native pointers, LVGL objects, paths from user
 pickers, io/os/debug/package or Lua-created coroutines are exposed.
@@ -82,6 +82,28 @@ The probe table fields are `format`, `buffer_bytes`, `free_before`,
 `maximum_frame_ms`. Timing is diagnostic cooperative-loop timing, not a
 real-time rendering guarantee. Normal exit, emergency exit, storage removal
 and host shutdown all release the native buffer.
+
+### API 1.4 indexed drawing Canvas
+
+API 1.4 drawing is exclusive-only and owns one indexed 4-bit buffer. The fixed
+16-color palette is system-defined; Lua uses indices 0..15 and never receives
+pixel memory or LVGL objects.
+
+| Call | Contract |
+|---|---|
+| `canvas.create(width,height)` | Replace any previous Canvas with one I4 Canvas. Width is 16..320 and height 16..204. Returns true or `nil,out_of_memory`; non-exclusive use returns `nil,exclusive_required`. |
+| `canvas.clear(color)` | Fill the active Canvas with palette index 0..15. Returns true or `nil,no_canvas`. |
+| `canvas.line(x1,y1,x2,y2,color,thickness)` | Draw a clipped square-brush line. Color is 0..15, thickness 1..9, and endpoints must be inside the created Canvas. Returns true or `nil,no_canvas/outside_canvas`. |
+
+Canvas input uses `ui.wait()` and returns `0,event,x,y`; event is
+`canvas_down`, `canvas_move` or `canvas_up`. The fixed eight-event queue still
+applies, so apps draw incrementally and tolerate dropped move samples. Button
+events keep the API 1.2 three-value form. `canvas.release()` safely releases
+either Canvas kind.
+
+API 1.4 intentionally does not yet claim BMP import/export. That is the next
+Paint slice and will use document handles and transactional writes rather than
+Lua pixel strings.
 
 ## Files
 

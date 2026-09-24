@@ -14,10 +14,9 @@ called out explicitly and must not be mistaken for implemented code.
 - The custom system keyboard passed its initial on-board visibility and input
   check and now serves Notes through an adapter. Repetition, close, rotation and
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
-- Stage 5 Work packages 1 and 2 are accepted on hardware. Work package 3 target
-  measurements select an indexed 4-bit Canvas for Paint: RGB565 cannot allocate
-  and I8 leaves too little contiguous memory. Random reset classification and
-  repeated I4 endurance remain open.
+- Stage 5 Work packages 1–3 are accepted on hardware. Work package 4 now has a
+  bounded API 1.4 indexed drawing/touch slice and a basic Paint app; BMP
+  Open/Save and SD recovery remain.
 
 ## Boot and update flow
 
@@ -59,8 +58,8 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
 | `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
-| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers and the experimental system-owned Canvas probe | Sole LVGL owner; presents the draw buffer through `lv_image`, detaches the source, then releases object/buffer in order. |
-| `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI model/event/timer queues and Canvas-probe requests | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership or pixel arrays. |
+| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers, Canvas probe and I4 drawing host | Sole LVGL owner; presents the draw buffer through `lv_image`, handles touch/dirty drawing, detaches the source, then releases object/buffer in order. |
+| `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI/event/timer and Canvas command models | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership or pixel arrays. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
 | `src/vendor/lua549/*` | Pinned official Lua 5.4.9 core and selected safe libraries | Reproducibly installed by `tools/install_lua.py`; 32-bit number configuration. |
@@ -68,6 +67,7 @@ Arduino global `SD` implementation without concurrent access.
 | `templates/yap_app/*` | Valid API 1.1 starter application | Package resource, queued buttons and app-controlled exit; no capabilities by default. |
 | `examples/calculator_yap/*` | API 1.2 reference Calculator | Fullscreen, no capabilities, system widgets only, owns its visible Exit button. |
 | `examples/canvas_probe_yap/*` | Temporary API 1.3 Canvas experiment | Exclusive-only RGB565/I8/I4 allocation, dirty-rectangle and recovery measurements; not the final drawing API. |
+| `examples/paint_yap/*` | API 1.4 Paint reference, first slice | I4 pencil/eraser/palette/clear/touch and dirty-exit confirmation; BMP storage is deliberately pending. |
 | `src/services/TouchCalibrationService.*` | Five-point raw-axis fit | Shared algorithm; graphical overlay is still in `DesktopShell`. |
 | `src/services/LocalizationService.h` | English/Russian selector helper | String catalog is currently distributed through shell call sites. |
 | `src/ui/LvglPort.*` | LVGL display, partial buffers and pointer adapter | The only current LVGL port; called cooperatively from the Arduino loop. |
