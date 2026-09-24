@@ -1,8 +1,9 @@
 # Roadmap Stage 5 — YAP SDK, Canvas and reference applications
 
-Status: Work package 1 is accepted on the target. Work package 2 is implemented
-and host/build-tested; `calculator.yap` still needs its target-board check. Stage 4's remaining physical gates
-continue in parallel; failed hardware checks take priority over new features.
+Status: Work packages 1 and 2 are accepted on the target. Work package 3's
+Canvas probe is implemented and host/build-tested; its memory and timing results
+must now be recorded on the target. Stage 4's remaining physical gates continue
+in parallel; failed hardware checks take priority over new features.
 
 ## Goal
 
@@ -41,10 +42,11 @@ confirmation, tap/change/hold/swipe/timer events and value lookup are exposed.
 
 Exit: Calculator can be written without drawing its own controls, malformed or
 excess object requests fail predictably, and API 1.0/1.1 examples are unchanged.
-Host tests and firmware build pass; **Calculator touch/layout testing on the
-target is pending**.
+Host tests and firmware build pass; **Calculator touch/layout, normal exit,
+emergency exit and the following legacy-app relaunch were verified by the user
+on the target on 2026-09-24**.
 
-Target check for work package 2:
+Completed target check for work package 2:
 
 1. Upload the current firmware and copy `build/calculator.yap` to
    `/OSEsp32/Apps`.
@@ -61,14 +63,43 @@ Measure, do not guess, three single-buffer candidates for a 320x204 app area:
 | Candidate | Pixel bytes | Main trade-off |
 |---|---:|---|
 | RGB565 | 130,560 | Direct color, likely too costly beside a useful Lua quota. |
-| Indexed 8-bit | 65,280 + palette | Likely default; 256 colors and manageable RAM. |
-| Indexed 4-bit | 32,640 + palette | Best margin; only 16 simultaneous colors. |
+| Indexed 8-bit | 65,280 + 1,024 palette = 66,304 | Likely default; 256 colors and manageable RAM. |
+| Indexed 4-bit | 32,640 + 64 palette = 32,704 | Best margin; only 16 simultaneous colors. |
 
 The Canvas is native and system-owned. Lua receives bounded drawing operations
 and touch coordinates, not pixel tables or memory pointers. Track dirty
 rectangles, cap work per update, and retain the emergency corner exit. A tiled
 file-backed canvas is a measured fallback only; it is explicit paged data, not
 virtual memory or a generic swap file.
+
+The temporary API 1.3 `osesp32.canvas.probe()` experiment and
+`canvas_probe.yap` are implemented. The probe is accepted only in exclusive
+mode. It allocates one LVGL draw buffer, paints a visible pattern, moves a
+24x24 square for 30 dirty-rectangle frames and returns the actual draw-buffer
+size, allocation/fill time, free/minimum heap, largest free block and average/
+maximum frame interval. `osesp32.canvas.release()` deletes both the LVGL object
+and its buffer and reports the recovered heap. This diagnostic contract is not
+the final Paint drawing API.
+
+Target check for work package 3:
+
+1. Upload the current firmware and copy `build/canvas_probe.yap` to
+   `/OSEsp32/Apps`.
+2. Run **RGB**, record the displayed numbers, press **FREE**, and record the
+   released free heap and largest block. Repeat for **I8** and **I4**.
+3. Confirm each probe shows a patterned canvas and a moving square without a
+   reset, corruption or stuck touch input.
+4. Exit and relaunch the probe ten times, then run Calculator and
+   `file_roundtrip.yap` to confirm complete shell/runtime restoration.
+5. Record the results below. Choose the Paint format only after comparing the
+   safe contiguous-memory margin and frame latency; allocation success alone
+   is insufficient.
+
+| Format | Buffer B | Free active | Largest active | Minimum free | Alloc/fill us | Frame avg/max ms | Free/largest after FREE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RGB565 | pending | pending | pending | pending | pending | pending | pending |
+| I8 | pending | pending | pending | pending | pending | pending | pending |
+| I4 | pending | pending | pending | pending | pending | pending | pending |
 
 Exit: chosen Canvas survives repeated exclusive launch/exit with recorded free
 heap, minimum heap, largest block, frame latency and no desktop restoration leak.
@@ -118,8 +149,9 @@ hardware acceptance remain separate reports.
 
 1. `new → check → build → inspect` works in PowerShell and Bash without opening
    `.lua` through a file association.
-2. API 1.0/1.1 packages still run, API 1.2 bounds hold, and unsupported future
-   minors remain rejected.
+2. API 1.0/1.1 packages still run, API 1.2 bounds hold, the experimental API
+   1.3 Canvas probe remains exclusive-only, and unsupported future minors are
+   rejected.
 3. Calculator, YAP Notes, Paint, viewer and game run from `/OSEsp32/Apps`.
 4. Paint round-trips BMP and survives cancel, failed write, removal and replace.
 5. UI/Canvas limits fail with a controlled message, never corrupt shell state.

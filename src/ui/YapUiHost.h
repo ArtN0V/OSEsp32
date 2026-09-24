@@ -32,6 +32,14 @@ class YapUiHost {
   YapRuntimeService::UiKind widgetKinds_[YapRuntimeService::MAX_UI_WIDGETS]={};
   uint8_t widgetRows_[YapRuntimeService::MAX_UI_WIDGETS]={};
   uint8_t hostedWidgetCount_=0;
+  lv_obj_t* canvas_=nullptr;
+  lv_draw_buf_t* canvasBuffer_=nullptr;
+  lv_color_format_t canvasFormat_=LV_COLOR_FORMAT_UNKNOWN;
+  YapRuntimeService::CanvasStats canvasStats_;
+  bool canvasProbeActive_=false, canvasRequestStarted_=false;
+  uint8_t canvasFramesIssued_=0, canvasFramesRecorded_=0;
+  int16_t canvasPreviousX_=-1, canvasPreviousY_=-1;
+  uint32_t canvasLastFrameMs_=0, canvasFrameTotalMs_=0;
   lv_obj_t* modal_=nullptr;
   lv_obj_t* textarea_=nullptr;
   lv_obj_t* message_=nullptr;
@@ -55,6 +63,12 @@ class YapUiHost {
   void rebuildWidgets();
   const YapRuntimeService::UiWidget* widgetById(uint8_t id) const;
   void openTextField(uint8_t id);
+  void beginCanvasProbe(const char* format);
+  void updateCanvasProbe();
+  void releaseCanvas();
+  void setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay);
+  void paintCanvasRect(int16_t x,int16_t y,int16_t width,int16_t height,
+                       uint16_t frame,bool overlay);
   static void event(lv_event_t* event);
   static void richEvent(lv_event_t* event);
   static void textEvent(lv_event_t* event);

@@ -94,8 +94,8 @@ objects must remain in real RAM. See [STAGE_4.md](STAGE_4.md).
 
 ## Stage 5 — desktop SDK
 
-Status: **Work package 1 accepted; work package 2 implemented and awaiting its
-Calculator hardware check**. Basic `file_roundtrip.yap`
+Status: **Work packages 1 and 2 accepted; work package 3 implemented and
+awaiting Canvas measurements on the board**. Basic `file_roundtrip.yap`
 and `document_info.yap` operation has been reported on the target board. The
 remaining Stage 4 SD-removal, transaction interruption and long endurance
 checks stay open and are not silently waived by starting SDK work.
@@ -107,11 +107,13 @@ checks stay open and are not silently waived by starting SDK work.
 2. Freeze an additive API 1.2 UI object model: bounded labels, buttons, toggle,
    list and text fields; stable integer IDs; scrolling; confirmation dialogs;
    queued tap/hold/swipe/timer events. Lua never receives LVGL objects.
-   **Implemented and host/build-tested; Calculator target check pending.**
+   **Implemented, host/build-tested and accepted on the target.**
 3. Measure a system-owned native Canvas in exclusive mode. Compare RGB565,
    indexed 8-bit and indexed 4-bit storage using both free heap and largest
    block. Redraw only dirty rectangles. Do not add a second full-screen buffer
-   or represent pixels as Lua tables.
+   or represent pixels as Lua tables. **The temporary exclusive API 1.3 probe
+   and sample are implemented and host/build-tested; RGB565/I8/I4 target data
+   and the final format decision are pending.**
 4. Implement Paint as the storage/memory reference: incremental BMP 16/24/32
    import, interoperable 24-bit BMP export, pencil/eraser/colors, dirty-state
    confirmation, Open/Save/replace and SD-removal recovery.

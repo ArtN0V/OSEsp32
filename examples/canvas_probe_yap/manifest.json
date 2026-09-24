@@ -1,0 +1,10 @@
+{
+  "id": "org.osesp32.canvasprobe",
+  "name": "Canvas Probe",
+  "api_minor": 3,
+  "entry": "main",
+  "mode": "exclusive",
+  "memory": 24576,
+  "capabilities": [],
+  "associations": []
+}

@@ -1,5 +1,6 @@
 #include "YapUiHost.h"
 #include <strings.h>
+#include <esp_heap_caps.h>
 
 lv_obj_t* YapUiHost::button(lv_obj_t* parent,const char* text,int x,int y,int w,int action) {
   auto* b=lv_button_create(parent);
@@ -88,6 +89,7 @@ void YapUiHost::dismiss() {
 }
 void YapUiHost::shutdown() {
   dismiss();
+  releaseCanvas(); canvasRequestStarted_=false;
   for (auto& b:buttons_) { if (b) lv_obj_delete(b); b=nullptr; }
   if (widgetRoot_) lv_obj_delete(widgetRoot_);
   widgetRoot_=nullptr; hostedWidgetCount_=0;
@@ -96,6 +98,135 @@ void YapUiHost::shutdown() {
     widgetRows_[index]=0;
   }
   runtime_=nullptr; keyboard_=nullptr; richUi_=false;
+}
+
+void YapUiHost::releaseCanvas() {
+  canvasProbeActive_=false;
+  if (canvas_) lv_obj_delete(canvas_);
+  canvas_=nullptr;
+  if (canvasBuffer_) lv_draw_buf_destroy(canvasBuffer_);
+  canvasBuffer_=nullptr; canvasFormat_=LV_COLOR_FORMAT_UNKNOWN;
+  canvasFramesIssued_=canvasFramesRecorded_=0;
+  canvasPreviousX_=canvasPreviousY_=-1;
+}
+
+void YapUiHost::setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay) {
+  if (!canvasBuffer_ || x<0 || y<0 || x>=320 || y>=204) return;
+  uint8_t* pixel=static_cast<uint8_t*>(lv_draw_buf_goto_xy(canvasBuffer_,x,y));
+  if (!pixel) return;
+  if (canvasFormat_==LV_COLOR_FORMAT_RGB565) {
+    uint8_t red=overlay ? static_cast<uint8_t>(255-(frame*7)%128) : x*255/319;
+    uint8_t green=overlay ? static_cast<uint8_t>((frame*29)%256) : y*255/203;
+    uint8_t blue=overlay ? 255 : static_cast<uint8_t>(((x/20+y/20)&1) ? 190 : 35);
+    *reinterpret_cast<uint16_t*>(pixel)=lv_color_to_u16(lv_color_make(red,green,blue));
+  } else if (canvasFormat_==LV_COLOR_FORMAT_I8) {
+    *pixel=overlay ? static_cast<uint8_t>(160+(frame*13)%96)
+                   : static_cast<uint8_t>((x+y*2)&0xff);
+  } else {
+    const uint8_t value=overlay ? static_cast<uint8_t>((frame%15)+1)
+                                : static_cast<uint8_t>((x/20+y/17)&0x0f);
+    if (x&1) *pixel=(*pixel&0xf0)|value;
+    else *pixel=(*pixel&0x0f)|(value<<4);
+  }
+}
+
+void YapUiHost::paintCanvasRect(int16_t x,int16_t y,int16_t width,int16_t height,
+                                uint16_t frame,bool overlay) {
+  for (int16_t row=y;row<y+height;++row)
+    for (int16_t column=x;column<x+width;++column)
+      setCanvasPixel(column,row,frame,overlay);
+}
+
+void YapUiHost::beginCanvasProbe(const char* format) {
+  releaseCanvas(); canvasStats_={};
+  strlcpy(canvasStats_.format,format,sizeof(canvasStats_.format));
+  if (!strcmp(format,"rgb565")) canvasFormat_=LV_COLOR_FORMAT_RGB565;
+  else if (!strcmp(format,"i8")) canvasFormat_=LV_COLOR_FORMAT_I8;
+  else canvasFormat_=LV_COLOR_FORMAT_I4;
+  canvasStats_.freeBefore=ESP.getFreeHeap();
+  canvasStats_.largestBefore=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  const uint32_t allocationStarted=micros();
+  canvas_=lv_canvas_create(lv_obj_get_parent(widgetRoot_));
+  canvasBuffer_=lv_draw_buf_create(320,204,canvasFormat_,LV_STRIDE_AUTO);
+  canvasStats_.allocationUs=micros()-allocationStarted;
+  if (!canvas_ || !canvasBuffer_) {
+    releaseCanvas();
+    canvasStats_.freeActive=ESP.getFreeHeap();
+    canvasStats_.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    canvasStats_.minimumFree=canvasStats_.freeActive;
+    runtime_->replyCanvas(canvasStats_,"out_of_memory"); return;
+  }
+  lv_canvas_set_draw_buf(canvas_,canvasBuffer_);
+  lv_obj_set_pos(canvas_,0,0); lv_obj_set_size(canvas_,320,204);
+  lv_obj_move_to_index(canvas_,0);
+  if (canvasFormat_==LV_COLOR_FORMAT_I8) {
+    for (uint16_t index=0;index<256;++index) {
+      const uint8_t red=((index>>5)&7)*255/7;
+      const uint8_t green=((index>>2)&7)*255/7;
+      const uint8_t blue=(index&3)*255/3;
+      lv_draw_buf_set_palette(canvasBuffer_,index,lv_color32_make(red,green,blue,255));
+    }
+  } else if (canvasFormat_==LV_COLOR_FORMAT_I4) {
+    static const uint32_t colors[16]={
+      0x101820,0xE74C3C,0x2ECC71,0x3498DB,0xF1C40F,0x9B59B6,0x1ABC9C,0xECF0F1,
+      0x7F8C8D,0xC0392B,0x27AE60,0x2980B9,0xF39C12,0x8E44AD,0x16A085,0xFFFFFF};
+    for (uint8_t index=0;index<16;++index) {
+      const uint32_t color=colors[index];
+      lv_draw_buf_set_palette(canvasBuffer_,index,lv_color32_make(
+          color>>16,(color>>8)&0xff,color&0xff,255));
+    }
+  }
+  const uint32_t fillStarted=micros();
+  paintCanvasRect(0,0,320,204,0,false);
+  lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
+  canvasStats_.fillUs=micros()-fillStarted;
+  canvasStats_.bufferBytes=canvasBuffer_->data_size;
+  canvasStats_.freeActive=ESP.getFreeHeap();
+  canvasStats_.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  canvasStats_.minimumFree=canvasStats_.freeActive;
+  lv_obj_invalidate(canvas_);
+  canvasProbeActive_=true; canvasRequestStarted_=true;
+  canvasFramesIssued_=canvasFramesRecorded_=0;
+  canvasFrameTotalMs_=0; canvasStats_.maximumFrameMs=0;
+  canvasPreviousX_=canvasPreviousY_=-1; canvasLastFrameMs_=millis();
+}
+
+void YapUiHost::updateCanvasProbe() {
+  if (!canvasProbeActive_ || !canvas_ || !canvasBuffer_) return;
+  const uint32_t now=millis();
+  if (now-canvasLastFrameMs_<25) return;
+  if (canvasFramesIssued_>canvasFramesRecorded_) {
+    const uint32_t elapsed=now-canvasLastFrameMs_;
+    canvasFrameTotalMs_+=elapsed; ++canvasFramesRecorded_;
+    if (elapsed>canvasStats_.maximumFrameMs)
+      canvasStats_.maximumFrameMs=elapsed>UINT16_MAX ? UINT16_MAX : elapsed;
+    const uint32_t freeNow=ESP.getFreeHeap();
+    if (freeNow<canvasStats_.minimumFree) canvasStats_.minimumFree=freeNow;
+    if (canvasFramesRecorded_>=30) {
+      canvasStats_.frameCount=canvasFramesRecorded_;
+      canvasStats_.averageFrameMs=canvasFrameTotalMs_/canvasFramesRecorded_;
+      canvasStats_.freeActive=ESP.getFreeHeap();
+      canvasStats_.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+      canvasProbeActive_=false; runtime_->replyCanvas(canvasStats_); return;
+    }
+  }
+  if (canvasPreviousX_>=0)
+    paintCanvasRect(canvasPreviousX_,canvasPreviousY_,24,24,canvasFramesIssued_,false);
+  const int16_t x=(canvasFramesIssued_*17)%296;
+  const int16_t y=(canvasFramesIssued_*11)%180;
+  paintCanvasRect(x,y,24,24,canvasFramesIssued_,true);
+  lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
+  lv_area_t coordinates; lv_obj_get_coords(canvas_,&coordinates);
+  if (canvasPreviousX_>=0) {
+    lv_area_t oldArea={coordinates.x1+canvasPreviousX_,coordinates.y1+canvasPreviousY_,
+                       coordinates.x1+canvasPreviousX_+23,coordinates.y1+canvasPreviousY_+23};
+    lv_obj_invalidate_area(canvas_,&oldArea);
+  }
+  lv_area_t newArea={coordinates.x1+x,coordinates.y1+y,
+                     coordinates.x1+x+23,coordinates.y1+y+23};
+  lv_obj_invalidate_area(canvas_,&newArea);
+  canvasPreviousX_=x; canvasPreviousY_=y;
+  ++canvasFramesIssued_; canvasLastFrameMs_=now;
 }
 
 void YapUiHost::rebuildWidgets() {
@@ -248,6 +379,7 @@ void YapUiHost::choose(const char* mode) {
 void YapUiHost::storageLost() {
   if (lost_) return;
   lost_=true; runtime_->pauseStorage();
+  releaseCanvas(); canvasRequestStarted_=false;
   newModal(tr("SD removed. Unsaved app state is paused.","SD извлечена. Приложение приостановлено."));
   button(modal_,tr("Retry","Повторить"),10,80,144,40);
   button(modal_,tr("Close app","Закрыть"),166,80,144,41);
@@ -264,6 +396,9 @@ void YapUiHost::update() {
     if (action==41) close_=true;
     return;
   }
+  if (runtime_->request()!=YapRuntimeService::Request::CanvasProbe)
+    canvasRequestStarted_=false;
+  updateCanvasProbe();
   if (version_!=runtime_->uiVersion()) {
     version_=runtime_->uiVersion();
     if (richUi_) rebuildWidgets();
@@ -328,6 +463,19 @@ void YapUiHost::update() {
   }
   auto request=runtime_->request();
   if (modal_ || request==YapRuntimeService::Request::None || request==YapRuntimeService::Request::Event) return;
+  if (request==YapRuntimeService::Request::CanvasProbe) {
+    if (!canvasRequestStarted_) beginCanvasProbe(runtime_->requestText());
+    return;
+  }
+  if (request==YapRuntimeService::Request::CanvasRelease) {
+    YapRuntimeService::CanvasStats stats={}; strlcpy(stats.format,"released",sizeof(stats.format));
+    stats.freeBefore=ESP.getFreeHeap();
+    stats.largestBefore=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    releaseCanvas();
+    stats.freeActive=ESP.getFreeHeap();
+    stats.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    stats.minimumFree=stats.freeActive; runtime_->replyCanvas(stats); return;
+  }
   if (request==YapRuntimeService::Request::Text) {
     newModal(tr("Text input","Ввод текста")); shown_=request;
     textarea_=lv_textarea_create(modal_); lv_obj_set_pos(textarea_,6,24); lv_obj_set_size(textarea_,308,55);

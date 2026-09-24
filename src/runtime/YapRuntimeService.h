@@ -42,7 +42,9 @@ struct YapRuntimeResult {
 
 class YapRuntimeService {
  public:
-  enum class Request : uint8_t { None, Event, Text, Open, Save, Confirm };
+  enum class Request : uint8_t {
+    None, Event, Text, Open, Save, Confirm, CanvasProbe, CanvasRelease
+  };
   enum class UiKind : uint8_t { None, Label, Button, Toggle, TextField, List };
   enum class UiEventKind : uint8_t {
     Tap,
@@ -66,6 +68,20 @@ class YapRuntimeService {
     char text[97] = {};
     uint8_t rowCount = 0;
     char rows[MAX_ROWS][33] = {};
+  };
+  struct CanvasStats {
+    char format[9] = {};
+    uint32_t bufferBytes = 0;
+    uint32_t freeBefore = 0;
+    uint32_t freeActive = 0;
+    uint32_t largestBefore = 0;
+    uint32_t largestActive = 0;
+    uint32_t minimumFree = 0;
+    uint32_t allocationUs = 0;
+    uint32_t fillUs = 0;
+    uint16_t frameCount = 0;
+    uint16_t averageFrameMs = 0;
+    uint16_t maximumFrameMs = 0;
   };
   static constexpr uint8_t MAX_UI_WIDGETS = 24;
   static constexpr uint8_t MAX_UI_EVENTS = 8;
@@ -99,6 +115,7 @@ class YapRuntimeService {
                    const char* text = nullptr);
   bool setWidgetText(uint8_t id, const char* text);
   void reply(const char* text, int handle = 0, const char* error = nullptr);
+  void replyCanvas(const CanvasStats& stats, const char* error = nullptr);
   AppStorageService& files() { return files_; }
   void pauseStorage();
   void resumeStorage();
@@ -168,6 +185,7 @@ class YapRuntimeService {
   char responseError_[33] = {};
   int responseHandle_ = 0;
   UiEvent responseEvent_;
+  CanvasStats responseCanvas_;
   bool responseReady_ = false, storagePaused_ = false;
   int initialDocument_=0;
   static int currentDocument(lua_State* state);
@@ -183,6 +201,8 @@ class YapRuntimeService {
   static int waitEvent(lua_State* state);
   static int requestText(lua_State* state);
   static int requestConfirm(lua_State* state);
+  static int requestCanvasProbe(lua_State* state);
+  static int requestCanvasRelease(lua_State* state);
   static int requestOpen(lua_State* state);
   static int requestSave(lua_State* state);
   static int continueRequest(lua_State* state, int status, intptr_t context);

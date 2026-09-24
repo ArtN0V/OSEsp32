@@ -1,7 +1,9 @@
-# OSEsp32 YAP API 1.2
+# OSEsp32 YAP API 1.3
 
 API 1.0 and 1.1 packages remain valid. Applications using the bounded widget
-model must declare `"api_minor": 2`.
+model must declare `"api_minor": 2`. API 1.3 currently adds only the temporary
+exclusive Canvas measurement contract documented below; it is not yet the
+final Paint drawing API.
 Lua 5.4.9 uses 32-bit integers/floats and one host-owned coroutine. All APIs
 below are under `osesp32`. No native pointers, LVGL objects, paths from user
 pickers, io/os/debug/package or Lua-created coroutines are exposed.
@@ -62,6 +64,25 @@ Fullscreen/exclusive have no system title bar or EXIT button. Apps provide
 their own button calling exit(). An invisible 2-second top-left hold remains
 for emergency cancellation. Windowed apps also retain the system EXIT button.
 
+### API 1.3 experimental Canvas probe
+
+The probe exists to select a safe no-PSRAM pixel format on the real board. It
+is available only to packages declaring API 1.3 and `"mode": "exclusive"`.
+The system owns the LVGL Canvas and draw buffer; Lua receives measurements, not
+pixel tables, native pointers or arbitrary drawing access.
+
+| Call | Contract |
+|---|---|
+| `canvas.probe(format)` | Replace any previous probe with one 320x204 buffer. `format` is `rgb565`, `i8` or `i4`. Paint a pattern, animate 30 dirty rectangles, then return a statistics table. A non-exclusive package receives `nil,exclusive_required`; allocation failure returns `nil,out_of_memory`. |
+| `canvas.release()` | Delete the probe Canvas and its draw buffer. Return a statistics table containing the free heap and largest block after release. Safe when no probe is active. |
+
+The probe table fields are `format`, `buffer_bytes`, `free_before`,
+`free_active`, `largest_before`, `largest_active`, `minimum_free`,
+`allocation_us`, `fill_us`, `frame_count`, `average_frame_ms` and
+`maximum_frame_ms`. Timing is diagnostic cooperative-loop timing, not a
+real-time rendering guarantee. Normal exit, emergency exit, storage removal
+and host shutdown all release the native buffer.
+
 ## Files
 
 Operations return a result (or true), or `nil, error`. Argument type/range
@@ -93,7 +114,7 @@ UTF-8, empty components, reserved FAT characters and trailing spaces/dots fail.
 Private read and write require separate manifest capabilities. Append requires
 both. Resources are always readable without private permission. A write handle
 can read its own staged bytes, not the old destination. There is no delete or
-rename API through 1.2. Abnormal exit and ordinary exit discard uncommitted writes.
+rename API through 1.3. Abnormal exit and ordinary exit discard uncommitted writes.
 Open handles must be explicitly closed to commit. Larger transfer loops should
 call sleep(1) between 512-byte chunks; native SD calls cannot be preempted.
 
@@ -152,5 +173,6 @@ individual large CRC scan can still pause touch. Defaults are explicit NVS
 choices and are reset via Settings → Default apps. CRC/app ID is not a signature;
 packages claiming the same ID share private data. Install trusted apps only.
 
-Examples: `examples/file_roundtrip_yap`, `examples/document_info_yap`.
-Stage 5 adds Canvas/Paint next, not general SD-backed RAM.
+Examples: `examples/file_roundtrip_yap`, `examples/document_info_yap` and the
+experimental `examples/canvas_probe_yap`. Stage 5 adds the final Canvas/Paint
+contract after target measurements, not general SD-backed RAM.

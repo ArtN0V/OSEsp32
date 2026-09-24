@@ -25,10 +25,11 @@ def main() -> None:
         yap_pack.pack(ROOT / "examples/lifecycle_yap" / f"{mode}.json",
                       ROOT / "examples/lifecycle_yap/main.lua",
                       output / f"lifecycle_{mode}.yap")
-    for example in ('file_roundtrip_yap','document_info_yap','calculator_yap'):
+    for example in ('file_roundtrip_yap','document_info_yap','calculator_yap',
+                    'canvas_probe_yap'):
         yap_pack.pack(ROOT/'examples'/example/'manifest.json',ROOT/'examples'/example/'main.lua',
                       output/f'{example.removesuffix("_yap")}.yap')
-    print(f"built {len(EXAMPLES) + 6} packages in {output}")
+    print(f"built {len(EXAMPLES) + 7} packages in {output}")
 
 
 if __name__ == "__main__":

@@ -79,7 +79,7 @@ class YapPackTests(unittest.TestCase):
                 YAP.inspect(package, quiet=True)
 
     def test_api_minor_and_resource_paths(self):
-        YAP.build_manifest({'id':'test','name':'Test','api_minor':2},1)
+        YAP.build_manifest({'id':'test','name':'Test','api_minor':3},1)
         with self.assertRaises(ValueError):
             YAP.build_manifest({'id':'test','name':'Test','api_minor':255},1)
         for name in ('../escape','/absolute','a//b','a/./b','bad\\name','a.','a ','x'*64):
@@ -89,7 +89,8 @@ class YapPackTests(unittest.TestCase):
 
     def test_resources_and_new_examples(self):
         with tempfile.TemporaryDirectory() as temporary:
-            for example in ('file_roundtrip_yap','document_info_yap','calculator_yap'):
+            for example in ('file_roundtrip_yap','document_info_yap','calculator_yap',
+                            'canvas_probe_yap'):
                 target=Path(temporary)/f'{example}.yap'
                 YAP.pack(ROOT/'examples'/example/'manifest.json',ROOT/'examples'/example/'main.lua',target)
                 YAP.inspect(target,quiet=True)

@@ -92,4 +92,5 @@ The OS validates path/size, header, table bounds, package CRC, every section's
 bounds/overlap/type/CRC, resource names/duplicates, supported API minor and
 finally the manifest. Lua source is not read or executed when an earlier check
 fails. Valid source is streamed into the quota-controlled Lua runtime. API 1.0,
-1.1 and 1.2 are accepted; a newer minor is rejected instead of guessed.
+1.1, 1.2 and the experimental 1.3 Canvas-probe minor are accepted; a newer
+minor is rejected instead of guessed.

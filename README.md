@@ -6,9 +6,9 @@ IDE sketch while keeping the implementation in modular C++ files.
 
 Stages 0–2 established the hardware, platform foundation and graphical shell;
 Stage 3 storage and personalization features are present. **Stage 4 application
-runtime implementation is complete and awaiting physical acceptance**: YAP
-execution, capability files, system dialogs and all three launch modes are
-implemented. The normal boot opens the LVGL desktop; the
+runtime implementation is complete and awaiting full physical acceptance;
+Stage 5 Canvas measurement is in progress**. YAP execution, capability files,
+system dialogs and all three launch modes are implemented. The normal boot opens the LVGL desktop; the
 proven diagnostic UI remains available as a recovery mode.
 
 ## Current capabilities
@@ -34,7 +34,8 @@ proven diagnostic UI remains available as a recovery mode.
   light sensor and memory/stress testing.
 - Sandboxed `.yap` applications with fixed Lua memory/CPU budgets, package
   resources, private data, system Open/Save, text input, file associations,
-  recoverable transactional document writes and a bounded API 1.2 widget model.
+  recoverable transactional document writes, a bounded API 1.2 widget model and
+  an exclusive API 1.3 Canvas measurement probe.
 
 ## Arduino IDE setup
 
@@ -202,8 +203,8 @@ Run `python tools/build_yap_examples.py` to create Hello plus controlled
 compile-error, missing-entry, out-of-memory and infinite-loop packages. Their
 expected results are documented in
 [examples/yap_runtime_tests/README.md](examples/yap_runtime_tests/README.md).
-The same command creates `file_roundtrip.yap`, `document_info.yap` and
-`calculator.yap`.
+The same command creates `file_roundtrip.yap`, `document_info.yap`,
+`calculator.yap` and `canvas_probe.yap`.
 Applications can show six OS-owned buttons, wait for queued taps, request the
 shared English/Russian keyboard, stream named package resources, keep private
 `data:/` files and request exact user-document handles through system Open/Save
@@ -260,6 +261,19 @@ fullscreen reference Calculator with:
 ```text
 python tools/yap.py build examples/calculator_yap -o build/calculator.yap
 ```
+
+Work package 3 measures a system-owned 320x204 Canvas before Paint's drawing
+API is finalized. Build the exclusive probe with:
+
+```text
+python tools/yap.py build examples/canvas_probe_yap -o build/canvas_probe.yap
+```
+
+Copy it to `/OSEsp32/Apps`, run RGB, I8 and I4, and press **FREE** after every
+result. Record the displayed heap/block/timing values and relaunch it ten times.
+This temporary API 1.3 probe uses one native buffer and dirty rectangles; it
+does not expose pixel memory to Lua. The exact checklist is in
+[Stage 5](docs/STAGE_5.md).
 
 ### Date, time and screen saver
 
@@ -326,7 +340,7 @@ docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 docs/STAGE_5.md           SDK, UI API, Canvas, Paint and reference-app gates
-docs/YAP_API.md           callable YAP 1.0–1.2 API, limits and failure semantics
+docs/YAP_API.md           callable YAP 1.0–1.3 API, limits and failure semantics
 ```
 
 ## Safety

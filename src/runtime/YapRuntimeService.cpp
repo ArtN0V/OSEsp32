@@ -185,6 +185,12 @@ int YapRuntimeService::initializeLibraries(lua_State* state) {
     lua_pushcfunction(state, requestConfirm); lua_setfield(state, -2, "confirm");
   }
   lua_setfield(state, -2, "ui");
+  if (runtime && runtime->activePackage_.manifest.apiMinor >= 3) {
+    lua_newtable(state);
+    lua_pushcfunction(state, requestCanvasProbe); lua_setfield(state, -2, "probe");
+    lua_pushcfunction(state, requestCanvasRelease); lua_setfield(state, -2, "release");
+    lua_setfield(state, -2, "canvas");
+  }
   lua_newtable(state);
   const char* operations[] = {"open","read","write","seek","size","flush","close","stat","list","mkdir"};
   for (int i=0;i<10;++i) {
@@ -681,6 +687,23 @@ int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
   const Request request=static_cast<Request>(context);
   if (request==Request::Text) { lua_pushstring(state,runtime->responseText_); return 1; }
   if (request==Request::Confirm) { lua_pushboolean(state,runtime->responseHandle_!=0); return 1; }
+  if (request==Request::CanvasProbe || request==Request::CanvasRelease) {
+    const CanvasStats& stats=runtime->responseCanvas_;
+    lua_newtable(state);
+    lua_pushstring(state,stats.format); lua_setfield(state,-2,"format");
+    lua_pushinteger(state,stats.bufferBytes); lua_setfield(state,-2,"buffer_bytes");
+    lua_pushinteger(state,stats.freeBefore); lua_setfield(state,-2,"free_before");
+    lua_pushinteger(state,stats.freeActive); lua_setfield(state,-2,"free_active");
+    lua_pushinteger(state,stats.largestBefore); lua_setfield(state,-2,"largest_before");
+    lua_pushinteger(state,stats.largestActive); lua_setfield(state,-2,"largest_active");
+    lua_pushinteger(state,stats.minimumFree); lua_setfield(state,-2,"minimum_free");
+    lua_pushinteger(state,stats.allocationUs); lua_setfield(state,-2,"allocation_us");
+    lua_pushinteger(state,stats.fillUs); lua_setfield(state,-2,"fill_us");
+    lua_pushinteger(state,stats.frameCount); lua_setfield(state,-2,"frame_count");
+    lua_pushinteger(state,stats.averageFrameMs); lua_setfield(state,-2,"average_frame_ms");
+    lua_pushinteger(state,stats.maximumFrameMs); lua_setfield(state,-2,"maximum_frame_ms");
+    return 1;
+  }
   if (request==Request::Event) {
     lua_pushinteger(state,runtime->responseEvent_.id);
     lua_pushstring(state,eventName(runtime->responseEvent_.kind));
@@ -708,6 +731,19 @@ int YapRuntimeService::requestText(lua_State* state) { return makeRequest(state,
 int YapRuntimeService::requestConfirm(lua_State* state) {
   return makeRequest(state,Request::Confirm,checkedText(state,1,96));
 }
+int YapRuntimeService::requestCanvasProbe(lua_State* state) {
+  auto* runtime=active(state);
+  if (runtime->activePackage_.manifest.launchMode!=YapLaunchMode::Exclusive) {
+    lua_pushnil(state); lua_pushliteral(state,"exclusive_required"); return 2;
+  }
+  const char* format=checkedText(state,1,7);
+  if (strcmp(format,"rgb565") && strcmp(format,"i8") && strcmp(format,"i4"))
+    return luaL_error(state,"canvas format must be rgb565, i8 or i4");
+  return makeRequest(state,Request::CanvasProbe,format);
+}
+int YapRuntimeService::requestCanvasRelease(lua_State* state) {
+  return makeRequest(state,Request::CanvasRelease,nullptr);
+}
 int YapRuntimeService::requestOpen(lua_State* state) {
   if (!(active(state)->activePackage_.manifest.capabilities&YapDocumentsOpen)) {
     lua_pushnil(state); lua_pushliteral(state,"permission_denied"); return 2;
@@ -727,6 +763,12 @@ void YapRuntimeService::reply(const char* text,int handle,const char* error) {
   strlcpy(responseText_,text ? text : "",sizeof(responseText_));
   strlcpy(responseError_,error ? error : "",sizeof(responseError_));
   responseHandle_=handle; responseReady_=true;
+}
+void YapRuntimeService::replyCanvas(const CanvasStats& stats,const char* error) {
+  if (request_!=Request::CanvasProbe && request_!=Request::CanvasRelease) return;
+  responseCanvas_=stats;
+  strlcpy(responseError_,error ? error : "",sizeof(responseError_));
+  responseReady_=true;
 }
 void YapRuntimeService::pauseStorage() {
   if (storagePaused_) return;
