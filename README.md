@@ -272,8 +272,11 @@ probe with:
 python tools/yap.py build examples/canvas_probe_yap -o build/canvas_probe.yap
 ```
 
-Copy it to `/OSEsp32/Apps` and relaunch/release I4 ten times to complete the
-remaining endurance gate.
+Copy it to `/OSEsp32/Apps` and repeat its I4/10x tests for the remaining
+endurance gate. If the board appears to restart, open **System Info** before
+removing power and record `Reset` plus `Marker`; the retained marker identifies
+the last Canvas phase and distinguishes panic/watchdog/brownout from an ordinary
+application exit.
 This temporary API 1.3 probe uses one native buffer and dirty rectangles; it
 does not expose pixel memory to Lua. The exact checklist is in
 [Stage 5](docs/STAGE_5.md).

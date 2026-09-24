@@ -1,7 +1,7 @@
 #include "YapUiHost.h"
 #include <strings.h>
 #include <esp_heap_caps.h>
-#include <misc/cache/instance/lv_image_cache.h>
+#include "../kernel/ResetDiagnostics.h"
 
 lv_obj_t* YapUiHost::button(lv_obj_t* parent,const char* text,int x,int y,int w,int action) {
   auto* b=lv_button_create(parent);
@@ -103,17 +103,21 @@ void YapUiHost::shutdown() {
 
 void YapUiHost::releaseCanvas() {
   canvasProbeActive_=false;
-  // LVGL 9.5.0's lv_canvas destructor drops the address of its draw-buffer
-  // pointer from the image cache instead of the draw buffer itself. Keep the
-  // system Canvas as an owned draw buffer shown by a plain image and always
-  // evict its real source before the buffer is freed.
-  if (canvasBuffer_) lv_image_cache_drop(canvasBuffer_);
-  if (canvas_) lv_obj_delete(canvas_);
+  const bool hadCanvas=canvas_ || canvasBuffer_;
+  if (hadCanvas) ResetDiagnostics::mark(ResetCheckpoint::CanvasRelease);
+  // The image cache is disabled in this build. Detach the variable source
+  // before destroying its storage so no pending invalidation can inspect a
+  // draw-buffer descriptor that has already been freed.
+  if (canvas_) {
+    lv_image_set_src(canvas_,nullptr);
+    lv_obj_delete(canvas_);
+  }
   canvas_=nullptr;
   if (canvasBuffer_) lv_draw_buf_destroy(canvasBuffer_);
   canvasBuffer_=nullptr; canvasFormat_=LV_COLOR_FORMAT_UNKNOWN;
   canvasFramesIssued_=canvasFramesRecorded_=0;
   canvasPreviousX_=canvasPreviousY_=-1;
+  if (hadCanvas) ResetDiagnostics::mark(ResetCheckpoint::CanvasReleased);
 }
 
 void YapUiHost::setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay) {
@@ -151,6 +155,7 @@ void YapUiHost::beginCanvasProbe(const char* format) {
   else canvasFormat_=LV_COLOR_FORMAT_I4;
   canvasStats_.freeBefore=ESP.getFreeHeap();
   canvasStats_.largestBefore=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasAllocate);
   const uint32_t allocationStarted=micros();
   canvas_=lv_image_create(lv_obj_get_parent(widgetRoot_));
   canvasBuffer_=lv_draw_buf_create(320,204,canvasFormat_,LV_STRIDE_AUTO);
@@ -163,7 +168,6 @@ void YapUiHost::beginCanvasProbe(const char* format) {
     runtime_->replyCanvas(canvasStats_,"out_of_memory"); return;
   }
   lv_image_set_src(canvas_,canvasBuffer_);
-  lv_image_cache_drop(canvasBuffer_);
   lv_obj_set_pos(canvas_,0,0); lv_obj_set_size(canvas_,320,204);
   lv_obj_move_to_index(canvas_,0);
   if (canvasFormat_==LV_COLOR_FORMAT_I8) {
@@ -183,6 +187,7 @@ void YapUiHost::beginCanvasProbe(const char* format) {
           color>>16,(color>>8)&0xff,color&0xff,255));
     }
   }
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasFill);
   const uint32_t fillStarted=micros();
   paintCanvasRect(0,0,320,204,0,false);
   lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
@@ -192,6 +197,7 @@ void YapUiHost::beginCanvasProbe(const char* format) {
   canvasStats_.largestActive=heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   canvasStats_.minimumFree=canvasStats_.freeActive;
   lv_obj_invalidate(canvas_);
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasAnimate);
   canvasProbeActive_=true; canvasRequestStarted_=true;
   canvasFramesIssued_=canvasFramesRecorded_=0;
   canvasFrameTotalMs_=0; canvasStats_.maximumFrameMs=0;

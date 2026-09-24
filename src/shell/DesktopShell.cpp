@@ -1,5 +1,7 @@
 #include "DesktopShell.h"
 
+#include "../kernel/ResetDiagnostics.h"
+
 #include <strings.h>
 #include <new>
 
@@ -120,6 +122,7 @@ bool DesktopShell::begin(SystemKernel& kernel, BootModeService& bootMode) {
                      rotation180_);
   port_.displayDriver().setBrightness(settings_.loadBrightness());
   buildDesktop();
+  ResetDiagnostics::mark(ResetCheckpoint::ShellReady);
   kernel_->setLifecycle(LifecycleState::Running);
   kernel_->logger().info("shell", "desktop created; LVGL %u.%u.%u",
                          lv_version_major(), lv_version_minor(),
@@ -818,6 +821,7 @@ void DesktopShell::restoreYapDesktop() {
   }
   previousStorageMounted_ = storage_.mounted();
   updateClock();
+  ResetDiagnostics::mark(ResetCheckpoint::ShellReady);
   kernel_->logger().info("yap-lifecycle",
       "heap %lu -> prepared %lu -> restored %lu; block %lu -> %lu -> %lu",
       static_cast<unsigned long>(yapHeapBeforePrepare_),
@@ -1159,30 +1163,36 @@ void DesktopShell::openScreenSaverSettings() {
 void DesktopShell::openSystemInfo() {
   lv_obj_t* content = createWindow(tr("System Info", "Сведения о системе"));
   const MemorySnapshot memory = kernel_->monitor().sample();
-  char info[256];
+  char info[384];
   snprintf(info, sizeof(info), language_ == SystemLanguage::Russian
            ? "ESP32  %u МГц   Flash %u МиБ\n"
              "Свободно %u КиБ   минимум %u КиБ\n"
              "Макс. блок %u КиБ\n"
+             "Сброс %s (%d)\nМетка %s\n"
              "События %lu   пропущено %lu   сбои %lu"
            : "ESP32  %u MHz   Flash %u MiB\n"
              "Heap free %u KiB   minimum %u KiB\n"
              "Largest block %u KiB\n"
+             "Reset %s (%d)\nMarker %s\n"
              "Events %lu   dropped %lu   faults %lu",
            ESP.getCpuFreqMHz(), ESP.getFlashChipSize() / 1048576,
            memory.freeHeap / 1024, memory.minimumFreeHeap / 1024,
            memory.largestFreeBlock / 1024,
+           ResetDiagnostics::resetReasonName(),
+           ResetDiagnostics::resetReasonCode(),
+           ResetDiagnostics::previousCheckpointName(),
            static_cast<unsigned long>(kernel_->handledEventCount()),
            static_cast<unsigned long>(kernel_->events().droppedCount()),
            static_cast<unsigned long>(kernel_->faults().count()));
   lv_obj_t* label = lv_label_create(content);
   lv_label_set_text(label, info);
   lv_obj_set_pos(label, 10, 8);
-  createButton(content, tr("KEYBOARD TEST", "ТЕСТ КЛАВИАТУРЫ"), 42, 91,
+  lv_obj_set_style_text_font(label, uiSmallFont(), 0);
+  createButton(content, tr("KEYBOARD TEST", "ТЕСТ КЛАВИАТУРЫ"), 42, 116,
                220, 29, keyboardTestEvent);
   createButton(content,
                tr("HARDWARE DIAGNOSTICS", "ДИАГНОСТИКА ОБОРУДОВАНИЯ"),
-               42, 126, 220, 29, diagnosticsEvent);
+               42, 151, 220, 29, diagnosticsEvent);
 }
 
 void DesktopShell::openKeyboardTest() {

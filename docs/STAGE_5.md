@@ -112,24 +112,32 @@ Canvas with a fixed 16-color palette; imported BMP pixels are quantized to that
 palette and exported BMP pixels expand palette entries to 24-bit BGR. The final
 drawing API will be additive rather than changing the diagnostic API 1.3.
 
-The first endurance attempt exposed a lifecycle defect: starting I8 or I4
-again usually closed the application on the second or third allocation. LVGL
-9.5.0's `lv_canvas` destructor drops the address of its draw-buffer pointer
-from the image cache rather than the draw buffer source. That can retain a
-cache entry referring to freed pixel memory. OSEsp32 now displays its owned
-draw buffer through a plain `lv_image`, explicitly drops the real buffer from
-the cache, deletes the image, and only then destroys the buffer. It does not
-patch the installed LVGL library. Runtime host coverage now performs three
-consecutive probe/release continuations.
+The first endurance attempt exposed an unsafe lifecycle path: starting I8 or
+I4 again usually closed the application on the second or third allocation.
+OSEsp32 no longer uses LVGL 9.5.0's `lv_canvas` owner because its destructor
+drops an incorrect cache key. The probe presents its owned draw buffer through
+a plain `lv_image`. Since this build has both LVGL image caches disabled, release
+first detaches the variable image source, deletes the image object, and only
+then destroys the buffer; it does not issue redundant cache operations.
+
+A later target run could still restart at a random I4/I8 allocation or release.
+The identical 24 KiB Lua quota passes 64 probe/release continuations under the
+host sanitizers, so accumulating Lua response tables is not the cause. An
+RTC-backed reset breadcrumb now records allocate/fill/animate/release/released
+and **System Info** displays the ESP reset reason plus the previous marker. This
+diagnostic state is not user data and may be lost on complete power removal.
 
 Remaining exit gate: the selected I4 Canvas must survive ten repeated exclusive
 launch/exit cycles, followed by Calculator and `file_roundtrip.yap`, without a
 falling released baseline or failed desktop restoration.
 
-Retest the fix by uploading the current firmware, replacing
-`canvas_probe.yap`, pressing **10x** once and checking for `I4 stress 10x OK`.
-The displayed first and last `free`/`block` values should remain close. Then use
-**EXIT**, relaunch once, and run Calculator and `file_roundtrip.yap`.
+Retest by uploading the current firmware, replacing `canvas_probe.yap`, and
+pressing **10x** repeatedly. The displayed first and last `free`/`block` values
+may differ temporarily because Lua collection is incremental; the largest block
+must recover and later runs must remain stable. If the desktop appears to boot
+again, immediately open **System Info** and record both `Reset` and `Marker`
+before removing power. Then use **EXIT**, run Calculator and
+`file_roundtrip.yap`.
 
 ## Work package 4 — Paint
 

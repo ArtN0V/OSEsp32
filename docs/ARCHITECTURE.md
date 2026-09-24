@@ -266,9 +266,16 @@ pixel pointer or Lua pixel table. Normal/emergency teardown and SD-removal
 paths release it before rebuilding the shell. The measured result selects I4;
 the final additive Canvas API will preserve API 1.3 as a diagnostic contract.
 The display object is deliberately a plain `lv_image`, not LVGL 9.5.0's
-`lv_canvas`: the pinned Canvas destructor drops the wrong cache key. Explicit
-cache eviction before object/buffer destruction prevents stale references on
-repeated allocation without modifying the installed dependency.
+`lv_canvas`: the pinned Canvas destructor drops the wrong cache key. Both image
+caches are disabled in this build. Teardown detaches the variable image source,
+deletes the image, and only then destroys its draw buffer, so invalidation never
+observes freed descriptor storage.
+
+`ResetDiagnostics` keeps one small breadcrumb in RTC memory. Canvas ownership
+marks allocation, fill, animation and release boundaries; boot captures the
+previous marker and `esp_reset_reason()`, and System Info exposes both. This is
+crash triage rather than persistent settings or an RTC clock, and complete
+power removal may erase it.
 
 ## Stage 3 image policy
 

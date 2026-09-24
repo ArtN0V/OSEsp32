@@ -51,7 +51,7 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Application UI was limited to six fixed buttons and one output label. | Added versioned API 1.2 host-owned widgets, fixed geometry/count/text limits, queued rich events, confirmations/timers and a reference Calculator without exposing LVGL. |
 | P1 | UI preparation queried the runtime before the new package had started, so it could use the previous app's API version. API 1.2 first opened blank and then poisoned the next API 1.1 launch after emergency exit. | `DesktopShell` now passes the inspected package's API/layout explicitly into `YapUiHost`; the selection is immutable for that foreground session. |
 | P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Target measurements reject RGB565 (`out_of_memory`) and I8 (20,468-byte largest block) and select I4 (144,500 bytes free, 49,140-byte largest block). |
-| P1 | Repeating I8/I4 usually closed the app on cycle two or three because LVGL 9.5.0 `lv_canvas` teardown could leave the real draw buffer cached after it was freed. | `YapUiHost` now uses a plain image as the buffer presenter, explicitly drops the buffer cache entry before ordered object/buffer destruction, and the probe provides an automatic ten-cycle I4 test. Target revalidation is pending. |
+| P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 probe/release continuations. RTC breadcrumbs plus the ESP reset reason are now visible in System Info; target classification/revalidation remains pending. |
 
 ## Remaining risks and debt
 
@@ -109,5 +109,6 @@ Stage 4 implementation gate: **passed**. Its full hardware acceptance gate is
 still **open**. Stage 5 Work packages 1 and 2 are accepted on the board. Work
 package 3 target measurements reject RGB565, reject I8 for its 20,468-byte
 largest-block margin and select I4 with 144,500 bytes free and a 49,140-byte
-largest block. Ten-cycle Canvas endurance remains open before full Work package
-3 acceptance. Any failed Stage 4 check continues to take priority.
+largest block. Random target resets during Canvas endurance remain open before
+full Work package 3 acceptance. Any failed Stage 4 check continues to take
+priority.

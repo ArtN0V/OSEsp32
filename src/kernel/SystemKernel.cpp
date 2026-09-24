@@ -1,16 +1,21 @@
 #include "SystemKernel.h"
 
+#include "ResetDiagnostics.h"
+
 #include <esp_system.h>
 
 bool SystemKernel::begin() {
+  ResetDiagnostics::begin();
   const bool loggerOk = logger_.begin();
   const bool eventsOk = events_.begin();
   if (!loggerOk || !eventsOk) return false;
 
   faults_.begin(events_, logger_);
   monitor_.begin(events_, logger_);
-  logger_.info("kernel", "OSEsp32 kernel starting; reset reason=%d",
-               static_cast<int>(esp_reset_reason()));
+  logger_.info("kernel", "OSEsp32 kernel starting; reset=%s(%d), marker=%s",
+               ResetDiagnostics::resetReasonName(),
+               ResetDiagnostics::resetReasonCode(),
+               ResetDiagnostics::previousCheckpointName());
   events_.publish(SystemEventType::BootCompleted, ESP.getFreeHeap(),
                   ESP.getFlashChipSize());
   setLifecycle(LifecycleState::Diagnostics);

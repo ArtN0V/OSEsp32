@@ -95,8 +95,8 @@ objects must remain in real RAM. See [STAGE_4.md](STAGE_4.md).
 ## Stage 5 — desktop SDK
 
 Status: **Work packages 1 and 2 accepted; Work package 3 measurements select
-indexed 4-bit Canvas, with its repeated-launch check still open; Work package 4
-is next**. Basic `file_roundtrip.yap`
+indexed 4-bit Canvas, with random-reset classification and repeated-launch
+checks still open; Work package 4 follows that gate**. Basic `file_roundtrip.yap`
 and `document_info.yap` operation has been reported on the target board. The
 remaining Stage 4 SD-removal, transaction interruption and long endurance
 checks stay open and are not silently waived by starting SDK work.

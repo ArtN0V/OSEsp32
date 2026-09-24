@@ -16,7 +16,8 @@ called out explicitly and must not be mistaken for implemented code.
   memory-stability checks in `SYSTEM_KEYBOARD.md` remain open.
 - Stage 5 Work packages 1 and 2 are accepted on hardware. Work package 3 target
   measurements select an indexed 4-bit Canvas for Paint: RGB565 cannot allocate
-  and I8 leaves too little contiguous memory. Ten-cycle endurance remains open.
+  and I8 leaves too little contiguous memory. Random reset classification and
+  repeated I4 endurance remain open.
 
 ## Boot and update flow
 
@@ -48,7 +49,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/board/DisplayDriver.*` | LovyanGFX ILI9341 bus/panel/backlight | HSPI, DMA channel 1, landscape rotation. |
 | `src/board/TouchDriver.*` | Software-SPI XPT2046 read and coordinate mapping | Own NVS namespace for calibration; no XPT2046 library. |
 | `src/board/SdCardDriver.*` | Recovery diagnostic SD tests | Only valid while diagnostics owns the foreground mode. |
-| `src/kernel/*` | Static event queue, log ring, faults, memory monitoring and lifecycle | No UI objects or hardware pin knowledge. |
+| `src/kernel/*` | Static event queue, log ring, faults, memory monitoring, lifecycle and retained reset breadcrumbs | `ResetDiagnostics` stores only one RTC-memory crash marker; no UI objects or hardware pin knowledge. |
 | `src/services/BootModeService.*` | One-shot diagnostics boot request | NVS-backed. |
 | `src/services/SystemSettingsService.*` | Shell settings persistence | NVS-backed; currently one method per key. |
 | `src/services/DateTimeService.*` | Software UTC clock and local offset | No RTC and no Wi-Fi source yet. |
@@ -58,7 +59,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
 | `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
-| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers and the experimental system-owned Canvas probe | Sole LVGL owner; presents the draw buffer through `lv_image`, explicitly evicts its cache entry, then releases object/buffer in order. |
+| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers and the experimental system-owned Canvas probe | Sole LVGL owner; presents the draw buffer through `lv_image`, detaches the source, then releases object/buffer in order. |
 | `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI model/event/timer queues and Canvas-probe requests | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership or pixel arrays. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
