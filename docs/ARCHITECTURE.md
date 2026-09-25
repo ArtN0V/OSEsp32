@@ -261,9 +261,11 @@ The temporary API 1.3 `canvas.probe/release` pair remains accepted only in exclu
 mode, and `YapUiHost` owns its LVGL object and one 320x204 draw buffer. It tests
 RGB565, indexed 8-bit and indexed 4-bit with dirty rectangles and reports heap,
 largest-block and timing data. API 1.4 adds a bounded I4-only drawing Canvas,
-clear/line commands and queued coordinate touch events. It still exposes no
-pixel pointer or Lua pixel table. Normal/emergency teardown and SD-removal paths
-release it before rebuilding the shell. API 1.3 stays a diagnostic contract.
+clear/line commands and queued coordinate touch events. API 1.5 adds a fixed
+scanline BMP bridge to document handles. It still exposes no pixel pointer or
+Lua pixel table. Normal/emergency teardown releases the Canvas before rebuilding
+the shell; SD removal cancels file transfer but retains a Paint Canvas through
+the Retry/Close decision. API 1.3 stays a diagnostic contract.
 The display object is deliberately a plain `lv_image`, not LVGL 9.5.0's
 `lv_canvas`: the pinned Canvas destructor drops the wrong cache key. Both image
 caches are disabled in this build. Teardown detaches the variable image source,
@@ -375,8 +377,10 @@ See `YAP_API.md` for the exact callable contract. No arbitrary GUI tree or nativ
 pointer is exposed. API 1.2 is bounded to 24 host-owned widgets, 12 aggregate
 list rows, four timers and eight queued events; API 1.0/1.1 retains its six
 fixed buttons. API 1.3 exposes the exclusive system-owned Canvas measurement;
-API 1.4 adds bounded I4 create/clear/line commands and coordinate touch events. Four
-handles and 512-byte transfers bound native memory
+API 1.4 adds bounded I4 create/clear/line commands and coordinate touch events.
+API 1.5 adds scanline BMP load/save against capability handles; the host owns a
+fixed 1,280-byte row buffer and never creates a second Canvas. Four handles and
+512-byte storage transfers bound native memory
 independently of Lua's quota. Files can grow to
 1 MiB with 128 KiB card reserve; append copies at most 4 KiB synchronously.
 Larger rewrites are streamed to a different destination with explicit waits.

@@ -35,7 +35,8 @@ proven diagnostic UI remains available as a recovery mode.
 - Sandboxed `.yap` applications with fixed Lua memory/CPU budgets, package
   resources, private data, system Open/Save, text input, file associations,
   recoverable transactional document writes, a bounded API 1.2 widget model,
-  an exclusive API 1.3 Canvas probe and API 1.4 indexed drawing/touch.
+  an exclusive API 1.3 Canvas probe, API 1.4 indexed drawing/touch and API 1.5
+  incremental BMP Canvas transfer.
 
 ## Arduino IDE setup
 
@@ -281,15 +282,18 @@ This temporary API 1.3 probe uses one native buffer and dirty rectangles; it
 does not expose pixel memory to Lua. The exact checklist is in
 [Stage 5](docs/STAGE_5.md).
 
-The first API 1.4 Paint slice adds pencil, eraser, thickness, palette, clear,
-coordinate touch and dirty-exit confirmation. Build it with:
+The API 1.5 Paint reference adds pencil, eraser, thickness, palette, clear,
+coordinate touch, transactional BMP Open/Save and dirty-exit confirmation.
+Build it with:
 
 ```text
 python tools/yap.py build examples/paint_yap -o build/paint.yap
 ```
 
-It intentionally has no BMP Open/Save yet; those transactional document paths
-are the next Work package 4 slice.
+It imports bounded uncompressed 16/24/32-bit BMP one scanline at a time,
+quantizes to the fixed 16-color Canvas palette and exports a standard 24-bit
+BMP. Copy it to `/OSEsp32/Apps`; the target checks are in
+[Stage 5](docs/STAGE_5.md).
 
 ### Date, time and screen saver
 
@@ -356,7 +360,7 @@ docs/STAGE_3.md           storage and personalization plan and checks
 docs/STAGE_3_1.md         stabilization plan before the YAP runtime
 docs/STAGE_4.md           sandboxed YAP runtime and application storage plan
 docs/STAGE_5.md           SDK, UI API, Canvas, Paint and reference-app gates
-docs/YAP_API.md           callable YAP 1.0–1.4 API, limits and failure semantics
+docs/YAP_API.md           callable YAP 1.0–1.5 API, limits and failure semantics
 ```
 
 ## Safety

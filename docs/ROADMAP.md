@@ -94,9 +94,9 @@ objects must remain in real RAM. See [STAGE_4.md](STAGE_4.md).
 
 ## Stage 5 — desktop SDK
 
-Status: **Work packages 1–3 accepted; Work package 4 is in progress with API
-1.4 indexed drawing/touch and the first Paint tool slice; BMP Open/Save is
-next**. Basic `file_roundtrip.yap`
+Status: **Work packages 1–3 accepted; Work package 4 is host/build-complete and
+awaiting target acceptance.** API 1.5 adds incremental BMP Open/Save to the I4
+Paint Canvas without a second framebuffer. Basic `file_roundtrip.yap`
 and `document_info.yap` operation has been reported on the target board. The
 remaining Stage 4 SD-removal, transaction interruption and long endurance
 checks stay open and are not silently waived by starting SDK work.
@@ -118,9 +118,9 @@ checks stay open and are not silently waived by starting SDK work.
    is accepted on the target.**
 4. Implement Paint as the storage/memory reference: incremental BMP 16/24/32
    import, interoperable 24-bit BMP export, pencil/eraser/colors, dirty-state
-   confirmation, Open/Save/replace and SD-removal recovery. **In progress: the
-   bounded I4 drawing/touch API and pencil/eraser/palette/clear/dirty UI are
-   implemented; BMP and storage recovery remain.**
+   confirmation, Open/Save/replace and SD-removal recovery. **Implemented and
+   host/build-tested as API 1.5; real-board BMP round-trip, removal and repeated
+   edit checks remain.**
 5. Ship reference YAP applications: Calculator, Notes, Paint, file viewer and a
    port of the existing game. The built-in Notes remains the recovery editor;
    YAP Notes documents the public SDK rather than replacing it immediately.

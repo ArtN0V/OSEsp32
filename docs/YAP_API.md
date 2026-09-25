@@ -1,9 +1,10 @@
-# OSEsp32 YAP API 1.4
+# OSEsp32 YAP API 1.5
 
 API 1.0 and 1.1 packages remain valid. Applications using the bounded widget
 model must declare `"api_minor": 2`. API 1.3 adds the temporary exclusive
 Canvas measurement contract. API 1.4 preserves that probe and adds the first
-bounded indexed drawing/touch contract used by Paint.
+bounded indexed drawing/touch contract. API 1.5 adds bounded BMP transfer
+between an I4 Canvas and system-issued document handles.
 Lua 5.4.9 uses 32-bit integers/floats and one host-owned coroutine. All APIs
 below are under `osesp32`. No native pointers, LVGL objects, paths from user
 pickers, io/os/debug/package or Lua-created coroutines are exposed.
@@ -101,9 +102,24 @@ applies, so apps draw incrementally and tolerate dropped move samples. Button
 events keep the API 1.2 three-value form. `canvas.release()` safely releases
 either Canvas kind.
 
-API 1.4 intentionally does not yet claim BMP import/export. That is the next
-Paint slice and will use document handles and transactional writes rather than
-Lua pixel strings.
+### API 1.5 Canvas BMP documents
+
+BMP conversion stays native and processes one scanline per UI-loop update. It
+does not allocate a second framebuffer or expose scanlines to Lua. These calls
+are exclusive-only, require an active I4 Canvas and accept live capability
+handles (Paint obtains them from the system document API).
+
+| Call | Contract |
+|---|---|
+| `canvas.load_bmp(h)` | Replace the Canvas with a top-left-aligned, palette-quantized BMP. Accepts bounded uncompressed 16/24/32-bit input and common 16/32-bit RGB bitfields. Dimensions must fit the active Canvas. Returns true or `nil,error`. The caller closes the read handle. |
+| `canvas.save_bmp(h)` | Stream the complete Canvas as interoperable bottom-up 24-bit BGR with four-byte row padding. Returns true or `nil,error`. The caller must commit with `fs.close(h,true)` only after success, or discard with `fs.close(h,false)`. |
+
+Loading clears uncovered Canvas pixels to white. Alpha is ignored. RLE,
+indexed source BMP, OS/2 headers, color profiles, scaling and images larger
+than the Canvas are rejected. During transfer Canvas touch is ignored. SD
+removal cancels the transfer and invalidates its handle but retains the RAM
+Canvas; after Retry the call returns `storage_removed`, so the app can report
+failure without losing the current drawing.
 
 ## Files
 

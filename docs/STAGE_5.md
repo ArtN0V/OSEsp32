@@ -1,8 +1,8 @@
 # Roadmap Stage 5 — YAP SDK, Canvas and reference applications
 
-Status: Work packages 1–3 are accepted on the target. Work package 4 has begun
-with the bounded API 1.4 I4 drawing/touch surface and a pencil/eraser Paint
-slice; BMP document Open/Save is next. Stage 4's remaining
+Status: Work packages 1–3 are accepted on the target. Work package 4 is
+host/build-complete with the bounded API 1.5 BMP document path and awaits the
+target checks below. Stage 4's remaining
 physical gates continue in parallel; failed hardware checks take priority over
 new features.
 
@@ -142,10 +142,11 @@ before removing power. Then use **EXIT**, run Calculator and
 
 ## Work package 4 — Paint
 
-Implemented first slice: `canvas.create/clear/line`, coordinate down/move/up
-events, and `examples/paint_yap` with pencil, eraser, five thicknesses, eight
-palette choices, clear, dirty indication and unsaved-exit confirmation. It
-declares no storage capabilities yet. The following file/recovery slice remains:
+Implemented: `canvas.create/clear/line`, coordinate down/move/up events,
+scanline `canvas.load_bmp/save_bmp`, and `examples/paint_yap` with pencil,
+eraser, five thicknesses, eight palette choices, clear, dirty indication,
+Open/Save and unsaved-exit confirmation. Paint declares only document
+open/create/replace authority and registers `bmp`.
 
 - Pencil, eraser, thickness, compact palette, clear and dirty indicator.
 - Incremental uncompressed BMP 16/24/32-bit read with strict headers/bounds.
@@ -154,6 +155,32 @@ declares no storage capabilities yet. The following file/recovery slice remains:
 - Unsaved-exit confirmation; SD Retry/Close that preserves RAM canvas where
   possible and never claims a failed save succeeded.
 - Own in-app Exit command; no system title/exit control in exclusive mode.
+
+The implementation advances one BMP row per shell update and splits physical
+file operations into at most 512-byte transfers. A fixed 1,280-byte scanline is
+the only additional pixel storage. SD removal cancels an in-flight transfer,
+invalidates handles and opens the existing Retry/Close overlay without freeing
+the RAM Canvas. The Lua call receives `storage_removed` after a successful
+Retry; failed output is discarded because Paint commits only after
+`canvas.save_bmp` succeeds.
+
+Target acceptance procedure for Work package 4:
+
+1. Replace `paint.yap` on the card and start Paint normally and by opening a
+   `.bmp` through Files. Confirm both routes show the drawing and controls.
+2. Draw with pen/eraser, cycle all five sizes, select every palette color and
+   clear once. Confirm no drawing occurs over the two toolbar rows.
+3. Open one 16-bit, one 24-bit and one 32-bit uncompressed BMP no larger than
+   320x176. Confirm orientation and approximate palette colors.
+4. Save as `drawing.bmp`, replace it after another edit, reopen it in Paint and
+   on a PC. Confirm 320x176, 24-bit color and matching visible pixels.
+5. Cancel Open and Save, reject dirty Open and dirty Exit, then accept each;
+   none may freeze the app or falsely clear the dirty marker.
+6. Remove SD while drawing, while Open is reading and while Save is writing.
+   Reinsert the original card and press Retry. The Canvas must remain visible;
+   an interrupted save must not replace the previous complete file.
+7. Perform ten open/edit/save/exit cycles, then run Calculator and
+   `file_roundtrip.yap`; record free heap and largest block before and after.
 
 Exit: create/open/edit/save/reopen produces matching pixels on OSEsp32 and a PC;
 interruption leaves an old or new complete BMP; repeated edits stay responsive.
@@ -191,8 +218,8 @@ hardware acceptance remain separate reports.
 1. `new → check → build → inspect` works in PowerShell and Bash without opening
    `.lua` through a file association.
 2. API 1.0/1.1 packages still run, API 1.2 bounds hold, the API 1.3 probe and
-   API 1.4 drawing Canvas remain exclusive-only, and unsupported future minors
-   are rejected.
+   API 1.4 drawing and API 1.5 BMP Canvas remain exclusive-only, and unsupported
+   future minors are rejected.
 3. Calculator, YAP Notes, Paint, viewer and game run from `/OSEsp32/Apps`.
 4. Paint round-trips BMP and survives cancel, failed write, removal and replace.
 5. UI/Canvas limits fail with a controlled message, never corrupt shell state.

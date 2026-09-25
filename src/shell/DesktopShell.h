@@ -25,8 +25,8 @@
 enum class ShellAppId : uint8_t {
   Files,
   Settings,
-  SystemInfo,
   Notes,
+  SystemInfo,
 };
 
 enum class ScreenSaverMode : uint8_t {

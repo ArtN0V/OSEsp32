@@ -42,6 +42,16 @@ class YapUiHost {
   int16_t canvasPreviousX_=-1, canvasPreviousY_=-1;
   int16_t canvasTouchX_=-1, canvasTouchY_=-1;
   uint32_t canvasLastFrameMs_=0, canvasFrameTotalMs_=0;
+  enum class CanvasIoKind : uint8_t { None, LoadBmp, SaveBmp };
+  struct CanvasIoState {
+    CanvasIoKind kind=CanvasIoKind::None;
+    int handle=0;
+    uint32_t fileSize=0, pixelOffset=0, rowStride=0;
+    uint32_t redMask=0, greenMask=0, blueMask=0;
+    uint16_t width=0, height=0, row=0, bitsPerPixel=0;
+    bool topDown=false;
+  } canvasIo_;
+  uint8_t canvasIoBuffer_[1280]={};
   lv_obj_t* modal_=nullptr;
   lv_obj_t* textarea_=nullptr;
   lv_obj_t* message_=nullptr;
@@ -69,10 +79,15 @@ class YapUiHost {
   bool createDrawingCanvas(uint16_t width,uint16_t height);
   void clearDrawingCanvas(uint8_t color);
   void drawCanvasLine(const YapRuntimeService::CanvasCommand& command);
+  bool beginCanvasBmpLoad(int handle,const char*& error);
+  bool beginCanvasBmpSave(int handle,const char*& error);
+  void updateCanvasIo();
+  void cancelCanvasIo();
   void updateCanvasProbe();
   void releaseCanvas();
   void setCanvasPixel(int16_t x,int16_t y,uint16_t frame,bool overlay);
   void setCanvasIndexPixel(int16_t x,int16_t y,uint8_t color);
+  uint8_t canvasIndexPixel(int16_t x,int16_t y) const;
   void paintCanvasRect(int16_t x,int16_t y,int16_t width,int16_t height,
                        uint16_t frame,bool overlay);
   static void event(lv_event_t* event);

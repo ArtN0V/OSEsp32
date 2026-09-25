@@ -44,7 +44,7 @@ class YapRuntimeService {
  public:
   enum class Request : uint8_t {
     None, Event, Text, Open, Save, Confirm, CanvasProbe, CanvasRelease,
-    CanvasCreate, CanvasClear, CanvasLine
+    CanvasCreate, CanvasClear, CanvasLine, CanvasLoadBmp, CanvasSaveBmp
   };
   enum class UiKind : uint8_t { None, Label, Button, Toggle, TextField, List };
   enum class UiEventKind : uint8_t {
@@ -91,6 +91,7 @@ class YapRuntimeService {
     uint16_t width = 0, height = 0;
     int16_t x1 = 0, y1 = 0, x2 = 0, y2 = 0;
     uint8_t color = 0, thickness = 1;
+    int handle = 0;
   };
   static constexpr uint8_t MAX_UI_WIDGETS = 24;
   static constexpr uint8_t MAX_UI_EVENTS = 8;
@@ -220,6 +221,8 @@ class YapRuntimeService {
   static int requestCanvasCreate(lua_State* state);
   static int requestCanvasClear(lua_State* state);
   static int requestCanvasLine(lua_State* state);
+  static int requestCanvasLoadBmp(lua_State* state);
+  static int requestCanvasSaveBmp(lua_State* state);
   static int requestOpen(lua_State* state);
   static int requestSave(lua_State* state);
   static int continueRequest(lua_State* state, int status, intptr_t context);

@@ -376,8 +376,8 @@ void DesktopShell::buildStartMenu() {
   lv_obj_set_style_text_color(title, lv_color_white(), 0);
 
   const char* names[] = {tr("Files", "Файлы"), tr("Settings", "Настройки"),
-                         tr("System Info", "Сведения о системе"),
-                         tr("Notes", "Заметки")};
+                         tr("Notes", "Заметки"),
+                         tr("System Info", "О системе")};
   for (uint8_t index = 0; index < 4; ++index) {
     createButton(startMenu_, names[index], 7, 28 + index * 28, 160, 25,
                  appButtonEvent,

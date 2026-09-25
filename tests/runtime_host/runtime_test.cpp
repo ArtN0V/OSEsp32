@@ -320,6 +320,21 @@ int main(int argc,char** argv) {
   assert(runtime.request()==YapRuntimeService::Request::CanvasRelease);
   canvasStats={}; strlcpy(canvasStats.format,"released",sizeof(canvasStats.format));
   runtime.replyCanvas(canvasStats); drain(); assert(runtime.result().exitedByApp);
+  package.manifest.apiMinor=5;
+  assert(start("function main() local c=osesp32.canvas; assert(c.create(320,176)); "
+    "assert(c.load_bmp(23)); assert(c.save_bmp(24)); assert(c.release()); osesp32.exit() end"));
+  runtime.update(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasCreate);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasLoadBmp);
+  assert(runtime.canvasCommand().handle==23);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasSaveBmp);
+  assert(runtime.canvasCommand().handle==24);
+  runtime.replyCanvasCommand(); runtime.update();
+  assert(runtime.request()==YapRuntimeService::Request::CanvasRelease);
+  canvasStats={}; strlcpy(canvasStats.format,"released",sizeof(canvasStats.format));
+  runtime.replyCanvas(canvasStats); drain(); assert(runtime.result().exitedByApp);
   package.manifest.apiMinor=1;
   package.manifest.launchMode=YapLaunchMode::Windowed;
   package.manifest.requestedMemory=32768;

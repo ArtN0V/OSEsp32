@@ -79,7 +79,7 @@ class YapPackTests(unittest.TestCase):
                 YAP.inspect(package, quiet=True)
 
     def test_api_minor_and_resource_paths(self):
-        YAP.build_manifest({'id':'test','name':'Test','api_minor':4},1)
+        YAP.build_manifest({'id':'test','name':'Test','api_minor':5},1)
         with self.assertRaises(ValueError):
             YAP.build_manifest({'id':'test','name':'Test','api_minor':255},1)
         for name in ('../escape','/absolute','a//b','a/./b','bad\\name','a.','a ','x'*64):

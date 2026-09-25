@@ -1,6 +1,7 @@
 #include "YapRuntimeService.h"
 
 #include <esp_heap_caps.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -193,6 +194,10 @@ int YapRuntimeService::initializeLibraries(lua_State* state) {
       lua_pushcfunction(state, requestCanvasCreate); lua_setfield(state, -2, "create");
       lua_pushcfunction(state, requestCanvasClear); lua_setfield(state, -2, "clear");
       lua_pushcfunction(state, requestCanvasLine); lua_setfield(state, -2, "line");
+      if (runtime->activePackage_.manifest.apiMinor >= 5) {
+        lua_pushcfunction(state, requestCanvasLoadBmp); lua_setfield(state, -2, "load_bmp");
+        lua_pushcfunction(state, requestCanvasSaveBmp); lua_setfield(state, -2, "save_bmp");
+      }
     }
     lua_setfield(state, -2, "canvas");
   }
@@ -743,7 +748,8 @@ int YapRuntimeService::continueRequest(lua_State* state,int,intptr_t context) {
     return 3;
   }
   if (request==Request::CanvasCreate || request==Request::CanvasClear ||
-      request==Request::CanvasLine) {
+      request==Request::CanvasLine || request==Request::CanvasLoadBmp ||
+      request==Request::CanvasSaveBmp) {
     lua_pushboolean(state,1); return 1;
   }
   lua_pushinteger(state,runtime->responseHandle_); return 1;
@@ -810,6 +816,20 @@ int YapRuntimeService::requestCanvasLine(lua_State* state) {
   runtime->canvasCommand_.color=color; runtime->canvasCommand_.thickness=thickness;
   return makeRequest(state,Request::CanvasLine,nullptr);
 }
+int YapRuntimeService::requestCanvasLoadBmp(lua_State* state) {
+  auto* runtime=active(state);
+  const lua_Integer handle=luaL_checkinteger(state,1);
+  if (handle<=0 || handle>INT_MAX) return luaL_error(state,"invalid file handle");
+  runtime->canvasCommand_={}; runtime->canvasCommand_.handle=handle;
+  return makeRequest(state,Request::CanvasLoadBmp,nullptr);
+}
+int YapRuntimeService::requestCanvasSaveBmp(lua_State* state) {
+  auto* runtime=active(state);
+  const lua_Integer handle=luaL_checkinteger(state,1);
+  if (handle<=0 || handle>INT_MAX) return luaL_error(state,"invalid file handle");
+  runtime->canvasCommand_={}; runtime->canvasCommand_.handle=handle;
+  return makeRequest(state,Request::CanvasSaveBmp,nullptr);
+}
 int YapRuntimeService::requestOpen(lua_State* state) {
   if (!(active(state)->activePackage_.manifest.capabilities&YapDocumentsOpen)) {
     lua_pushnil(state); lua_pushliteral(state,"permission_denied"); return 2;
@@ -838,7 +858,8 @@ void YapRuntimeService::replyCanvas(const CanvasStats& stats,const char* error) 
 }
 void YapRuntimeService::replyCanvasCommand(const char* error) {
   if (request_!=Request::CanvasCreate && request_!=Request::CanvasClear &&
-      request_!=Request::CanvasLine) return;
+      request_!=Request::CanvasLine && request_!=Request::CanvasLoadBmp &&
+      request_!=Request::CanvasSaveBmp) return;
   strlcpy(responseError_,error ? error : "",sizeof(responseError_));
   responseReady_=true;
 }

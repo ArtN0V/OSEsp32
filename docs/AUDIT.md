@@ -1,6 +1,6 @@
 # Project audit
 
-Audit date: 2026-09-24. Scope: board/kernel/services/UI/shell/runtime sources,
+Audit date: 2026-09-25. Scope: board/kernel/services/UI/shell/runtime sources,
 Arduino/PlatformIO configuration, packaging tools, examples, automated tests and
 all architecture/roadmap documentation. This audit distinguishes host/build
 evidence from behavior that still needs the ESP32-2432S028.
@@ -15,10 +15,10 @@ removal/reinsertion and heap-fragmentation checks cannot be proved by a desktop
 compiler or mocked filesystem. New feature evidence must not be mistaken for
 completion of the separate Stage 4 checklist.
 
-Current reproducible build after the first API 1.4 Paint slice:
+Current reproducible build after the API 1.5 Paint BMP slice:
 
-- static RAM: 101,220 bytes / 327,680 (30.9%);
-- flash: 985,865 bytes / 1,835,008 (53.7%);
+- static RAM: 102,556 bytes / 327,680 (31.3%);
+- flash: 989,053 bytes / 1,835,008 (53.9%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -26,8 +26,8 @@ Current reproducible build after the first API 1.4 Paint slice:
   12 aggregate list rows, four timers and eight events.
 - Canvas probe: one exclusive 320x204 native buffer in RGB565/I8/I4, never a
   Lua pixel table or second full-size framebuffer.
-- Paint slice: one variable-size exclusive I4 Canvas, bounded clear/line
-  commands and coordinate touch events.
+- Paint: one variable-size exclusive I4 Canvas, bounded clear/line/touch and a
+  fixed 1,280-byte incremental BMP row buffer; no second image-sized buffer.
 
 These are linker figures, not live heap measurements. Rebuild figures may move
 slightly with toolchain/library versions; LovyanGFX is now pinned at 1.2.28 and
@@ -54,6 +54,7 @@ LVGL at 9.5.0 for reproducibility.
 | P1 | UI preparation queried the runtime before the new package had started, so it could use the previous app's API version. API 1.2 first opened blank and then poisoned the next API 1.1 launch after emergency exit. | `DesktopShell` now passes the inspected package's API/layout explicitly into `YapUiHost`; the selection is immutable for that foreground session. |
 | P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Target measurements reject RGB565 (`out_of_memory`) and I8 (20,468-byte largest block) and select I4 (144,500 bytes free, 49,140-byte largest block). |
 | P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 continuations, RTC reset breadcrumbs remain available, and the subsequent target retest was reported stable. |
+| P2 | Paint could draw but had no bounded document round-trip and a naive decoder would require another framebuffer. | Added API 1.5 scanline BMP load/save over capability handles, strict 16/24/32-bit parsing, 24-bit transactional export and SD-removal cancellation that preserves the RAM Canvas. |
 
 ## Remaining risks and debt
 
@@ -98,8 +99,8 @@ packages with repaired CRCs, 100 launches + 100 exits, quota/pcall limits,
 UTF-8/traversal, package resource bounds, exact capabilities, handle exhaustion,
 stale handles after a different generation, interrupted transaction phases,
 text/button/document requests, API 1.2 widget bounds/events/confirmation,
-API 1.3 Canvas request/release continuations, API 1.4 drawing/touch requests and
-the real packed round-trip demo.
+API 1.3 Canvas request/release continuations, API 1.4 drawing/touch requests,
+API 1.5 BMP request continuations and the real packed round-trip demo.
 
 Python tests cover deterministic pack/inspect, resource paths, supported API,
 mandatory/overlapping/unknown sections and every example package. PlatformIO
@@ -110,6 +111,6 @@ consistency; it does not mark the hardware checklist passed.
 
 Stage 4 implementation gate: **passed**. Its full hardware acceptance gate is
 still **open**. Stage 5 Work packages 1–3 are accepted on the board. Work
-package 4 now has the first host/build-tested Paint drawing slice; BMP
-round-trip and SD recovery remain. Any failed Stage 4 check continues to take
-priority.
+package 4 is host/build-complete with Paint BMP Open/Save and Canvas-preserving
+SD recovery; its real-card BMP round-trip/removal/endurance checklist remains.
+Any failed Stage 4 check continues to take priority.
