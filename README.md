@@ -290,9 +290,9 @@ Build it with:
 python tools/yap.py build examples/paint_yap -o build/paint.yap
 ```
 
-It imports bounded uncompressed 16/24/32-bit BMP one scanline at a time,
-quantizes to the fixed 16-color Canvas palette and exports a standard 24-bit
-BMP. Copy it to `/OSEsp32/Apps`; the target checks are in
+It imports uncompressed 16/24/32-bit BMP through bounded 512-byte windows,
+proportionally reduces oversized images, quantizes to the fixed 16-color Canvas
+palette and exports a standard 24-bit BMP. Copy it to `/OSEsp32/Apps`; the target checks are in
 [Stage 5](docs/STAGE_5.md).
 
 ### Date, time and screen saver

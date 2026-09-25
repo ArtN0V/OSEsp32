@@ -48,7 +48,9 @@ class YapUiHost {
     int handle=0;
     uint32_t fileSize=0, pixelOffset=0, rowStride=0;
     uint32_t redMask=0, greenMask=0, blueMask=0;
-    uint16_t width=0, height=0, row=0, bitsPerPixel=0;
+    uint32_t sourceWidth=0, sourceHeight=0;
+    uint16_t width=0, height=0, row=0, column=0, bitsPerPixel=0;
+    uint16_t destinationX=0, destinationY=0;
     bool topDown=false;
   } canvasIo_;
   uint8_t canvasIoBuffer_[1280]={};

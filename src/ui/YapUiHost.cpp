@@ -373,10 +373,9 @@ bool YapUiHost::beginCanvasBmpLoad(int handle,const char*& errorText) {
   const uint32_t height=static_cast<uint32_t>(signedHeight<0 ? -signedHeight : signedHeight);
   const uint64_t rowStride=(static_cast<uint64_t>(signedWidth)*bits+31)/32*4;
   const uint64_t end=static_cast<uint64_t>(pixelOffset)+rowStride*height;
-  if (static_cast<uint32_t>(signedWidth)>canvasWidth_ || height>canvasHeight_ ||
-      rowStride>sizeof(canvasIoBuffer_) ||
-      static_cast<uint64_t>(pixelOffset)<14ULL+dibSize || end>length) {
-    errorText="bmp_too_large"; return false;
+  if (rowStride>UINT32_MAX || static_cast<uint64_t>(pixelOffset)<14ULL+dibSize ||
+      end>length) {
+    errorText="invalid_bmp"; return false;
   }
   uint32_t redMask=0, greenMask=0, blueMask=0;
   if (compression==3) {
@@ -394,11 +393,31 @@ bool YapUiHost::beginCanvasBmpLoad(int handle,const char*& errorText) {
     redMask=0x00ff0000; greenMask=0x0000ff00; blueMask=0x000000ff;
   }
   clearDrawingCanvas(15);
+  const uint32_t sourceWidth=static_cast<uint32_t>(signedWidth);
+  uint32_t targetWidth=sourceWidth, targetHeight=height;
+  if (sourceWidth>canvasWidth_ || height>canvasHeight_) {
+    if (static_cast<uint64_t>(canvasWidth_)*height <=
+        static_cast<uint64_t>(canvasHeight_)*sourceWidth) {
+      targetWidth=canvasWidth_;
+      targetHeight=max(static_cast<uint32_t>(1),
+                       static_cast<uint32_t>(static_cast<uint64_t>(height)*canvasWidth_/sourceWidth));
+    } else {
+      targetHeight=canvasHeight_;
+      targetWidth=max(static_cast<uint32_t>(1),
+                      static_cast<uint32_t>(static_cast<uint64_t>(sourceWidth)*canvasHeight_/height));
+    }
+  }
   canvasIo_={}; canvasIo_.kind=CanvasIoKind::LoadBmp; canvasIo_.handle=handle;
   canvasIo_.fileSize=length; canvasIo_.pixelOffset=pixelOffset;
   canvasIo_.rowStride=static_cast<uint32_t>(rowStride);
   canvasIo_.redMask=redMask; canvasIo_.greenMask=greenMask; canvasIo_.blueMask=blueMask;
-  canvasIo_.width=signedWidth; canvasIo_.height=height; canvasIo_.bitsPerPixel=bits;
+  canvasIo_.sourceWidth=sourceWidth; canvasIo_.sourceHeight=height;
+  canvasIo_.width=targetWidth; canvasIo_.height=targetHeight;
+  canvasIo_.destinationX=sourceWidth>canvasWidth_ || height>canvasHeight_
+      ? (canvasWidth_-targetWidth)/2 : 0;
+  canvasIo_.destinationY=sourceWidth>canvasWidth_ || height>canvasHeight_
+      ? (canvasHeight_-targetHeight)/2 : 0;
+  canvasIo_.bitsPerPixel=bits;
   canvasIo_.topDown=signedHeight<0;
   return true;
 }
@@ -449,24 +468,31 @@ void YapUiHost::updateCanvasIo() {
     runtime_->replyCanvasCommand(); cancelCanvasIo(); return;
   }
   if (canvasIo_.kind==CanvasIoKind::LoadBmp) {
-    const uint32_t offset=canvasIo_.pixelOffset+canvasIo_.row*canvasIo_.rowStride;
+    const uint32_t sourceY=static_cast<uint32_t>(canvasIo_.row)*
+                           canvasIo_.sourceHeight/canvasIo_.height;
+    const uint32_t fileRow=canvasIo_.topDown ? sourceY
+                                             : canvasIo_.sourceHeight-1-sourceY;
+    const uint8_t bytesPerPixel=canvasIo_.bitsPerPixel/8;
+    const uint32_t sourceX=static_cast<uint32_t>(canvasIo_.column)*
+                           canvasIo_.sourceWidth/canvasIo_.width;
+    const uint32_t pixelInRow=sourceX*bytesPerPixel;
+    // A 508-byte window guarantees that even a 32-bit pixel never straddles
+    // the 512-byte AppStorage transfer boundary.
+    const uint32_t chunkStart=pixelInRow/508*508;
+    const size_t wanted=min(static_cast<uint32_t>(512),canvasIo_.rowStride-chunkStart);
+    const uint32_t offset=canvasIo_.pixelOffset+fileRow*canvasIo_.rowStride+chunkStart;
     if (!runtime_->files().seek(canvasIo_.handle,offset)) {
       fail(runtime_->files().error()); return;
     }
-    size_t cursor=0;
-    while (cursor<canvasIo_.rowStride) {
-      const size_t wanted=min(static_cast<size_t>(512),
-                              static_cast<size_t>(canvasIo_.rowStride-cursor));
-      size_t count=0;
-      if (!runtime_->files().read(canvasIo_.handle,canvasIoBuffer_+cursor,wanted,count) ||
-          count!=wanted) { fail(runtime_->files().error()); return; }
-      cursor+=count;
-    }
-    const int16_t targetY=canvasIo_.topDown ? canvasIo_.row
-                                            : canvasIo_.height-1-canvasIo_.row;
-    const uint8_t bytesPerPixel=canvasIo_.bitsPerPixel/8;
-    for (uint16_t x=0;x<canvasIo_.width;++x) {
-      const uint8_t* source=canvasIoBuffer_+x*bytesPerPixel;
+    size_t count=0;
+    if (!runtime_->files().read(canvasIo_.handle,canvasIoBuffer_,wanted,count) ||
+        count!=wanted) { fail(runtime_->files().error()); return; }
+    while (canvasIo_.column<canvasIo_.width) {
+      const uint32_t sampleX=static_cast<uint32_t>(canvasIo_.column)*
+                             canvasIo_.sourceWidth/canvasIo_.width;
+      const uint32_t sampleOffset=sampleX*bytesPerPixel;
+      if (sampleOffset<chunkStart || sampleOffset+bytesPerPixel>chunkStart+count) break;
+      const uint8_t* source=canvasIoBuffer_+sampleOffset-chunkStart;
       uint8_t red=0, green=0, blue=0;
       if (canvasIo_.bitsPerPixel==24) {
         blue=source[0]; green=source[1]; red=source[2];
@@ -477,14 +503,20 @@ void YapUiHost::updateCanvasIo() {
         green=maskChannel(pixel,canvasIo_.greenMask);
         blue=maskChannel(pixel,canvasIo_.blueMask);
       }
-      setCanvasIndexPixel(x,targetY,nearestCanvasColor(red,green,blue));
+      setCanvasIndexPixel(canvasIo_.destinationX+canvasIo_.column,
+                          canvasIo_.destinationY+canvasIo_.row,
+                          nearestCanvasColor(red,green,blue));
+      ++canvasIo_.column;
     }
+    if (canvasIo_.column<canvasIo_.width) return;
     lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
     lv_area_t area; lv_obj_get_coords(canvas_,&area);
-    lv_area_t dirty={area.x1,static_cast<int32_t>(area.y1+targetY),
-                     static_cast<int32_t>(area.x1+canvasIo_.width-1),
-                     static_cast<int32_t>(area.y1+targetY)};
+    const int32_t targetY=area.y1+canvasIo_.destinationY+canvasIo_.row;
+    lv_area_t dirty={static_cast<int32_t>(area.x1+canvasIo_.destinationX),targetY,
+                     static_cast<int32_t>(area.x1+canvasIo_.destinationX+
+                                          canvasIo_.width-1),targetY};
     lv_obj_invalidate_area(canvas_,&dirty);
+    canvasIo_.column=0;
   } else {
     memset(canvasIoBuffer_,0,canvasIo_.rowStride);
     const int16_t sourceY=canvasIo_.height-1-canvasIo_.row;
@@ -697,8 +729,10 @@ void YapUiHost::picker() {
   for (uint8_t i=0;i<count_;++i) {
     char text[60]; snprintf(text,sizeof(text),"%s%s",entries_[i].directory ? LV_SYMBOL_DIRECTORY " " : "",entries_[i].name);
     auto* b=button(modal_,text,8,30+i*33,304,20+i);
-    bool allowed=entries_[i].directory ? strcasecmp(entries_[i].path,"/OSEsp32")!=0 :
-      runtime_->files().permitsDocument(entries_[i].path,request==YapRuntimeService::Request::Open ? "r" : "w");
+    const char* mode=request==YapRuntimeService::Request::Open ? "r" : "w";
+    bool allowed=entries_[i].directory
+      ? runtime_->files().permitsDocumentDirectory(entries_[i].path,mode)
+      : runtime_->files().permitsDocument(entries_[i].path,mode);
     if (!allowed) lv_obj_add_state(b,LV_STATE_DISABLED);
   }
   button(modal_,LV_SYMBOL_UP,8,164,48,30);

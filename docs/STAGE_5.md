@@ -156,9 +156,11 @@ open/create/replace authority and registers `bmp`.
   possible and never claims a failed save succeeded.
 - Own in-app Exit command; no system title/exit control in exclusive mode.
 
-The implementation advances one BMP row per shell update and splits physical
-file operations into at most 512-byte transfers. A fixed 1,280-byte scanline is
-the only additional pixel storage. SD removal cancels an in-flight transfer,
+The implementation advances at most one 508-byte source-row window per shell
+update and splits physical file operations into at most 512-byte transfers. A
+fixed 1,280-byte work buffer is the only additional pixel storage. Oversized
+BMPs are proportionally reduced with nearest-neighbor sampling and centered on
+the white Canvas. SD removal cancels an in-flight transfer,
 invalidates handles and opens the existing Retry/Close overlay without freeing
 the RAM Canvas. The Lua call receives `storage_removed` after a successful
 Retry; failed output is discarded because Paint commits only after
@@ -170,8 +172,9 @@ Target acceptance procedure for Work package 4:
    `.bmp` through Files. Confirm both routes show the drawing and controls.
 2. Draw with pen/eraser, cycle all five sizes, select every palette color and
    clear once. Confirm no drawing occurs over the two toolbar rows.
-3. Open one 16-bit, one 24-bit and one 32-bit uncompressed BMP no larger than
-   320x176. Confirm orientation and approximate palette colors.
+3. Open one 16-bit, one 24-bit and one 32-bit uncompressed BMP, including at
+   least one larger than 320x176. Confirm orientation, preserved proportions,
+   centering and approximate palette colors.
 4. Save as `drawing.bmp`, replace it after another edit, reopen it in Paint and
    on a PC. Confirm 320x176, 24-bit color and matching visible pixels.
 5. Cancel Open and Save, reject dirty Open and dirty Exit, then accept each;
@@ -181,6 +184,8 @@ Target acceptance procedure for Work package 4:
    an interrupted save must not replace the previous complete file.
 7. Perform ten open/edit/save/exit cycles, then run Calculator and
    `file_roundtrip.yap`; record free heap and largest block before and after.
+8. Open a BMP directly from `/OSEsp32/Wallpapers`. Confirm read access works,
+   while Paint still cannot save into that protected system directory.
 
 Exit: create/open/edit/save/reopen produces matching pixels on OSEsp32 and a PC;
 interruption leaves an old or new complete BMP; repeated edits stay responsive.

@@ -379,7 +379,8 @@ list rows, four timers and eight queued events; API 1.0/1.1 retains its six
 fixed buttons. API 1.3 exposes the exclusive system-owned Canvas measurement;
 API 1.4 adds bounded I4 create/clear/line commands and coordinate touch events.
 API 1.5 adds scanline BMP load/save against capability handles; the host owns a
-fixed 1,280-byte row buffer and never creates a second Canvas. Four handles and
+fixed 1,280-byte work buffer, reads oversized rows in bounded windows and never
+creates a second Canvas. Four handles and
 512-byte storage transfers bound native memory
 independently of Lua's quota. Files can grow to
 1 MiB with 128 KiB card reserve; append copies at most 4 KiB synchronously.

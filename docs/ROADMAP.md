@@ -137,8 +137,8 @@ checks stay open and are not silently waived by starting SDK work.
    largest-block baselines.
 
 Paint and Canvas details, SDK gates and physical checks live in
-[STAGE_5.md](STAGE_5.md). Optional image scaling/PNG follows only after the
-Canvas/runtime measurements leave a safe no-PSRAM margin.
+[STAGE_5.md](STAGE_5.md). Paint now has bounded nearest-neighbor BMP downscaling;
+general viewer scaling and PNG remain optional later work.
 
 ## Stage 6 — stabilization
 

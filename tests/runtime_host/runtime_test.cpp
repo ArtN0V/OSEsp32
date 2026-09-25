@@ -338,6 +338,8 @@ int main(int argc,char** argv) {
   package.manifest.apiMinor=1;
   package.manifest.launchMode=YapLaunchMode::Windowed;
   package.manifest.requestedMemory=32768;
+  package.manifest.associationCount=2;
+  strlcpy(package.manifest.associations[1],"bmp",9);
 
   AppStorageService fs;
   fs.begin(storage,package);
@@ -345,6 +347,15 @@ int main(int argc,char** argv) {
   for (auto* name:invalid) assert(!AppStorageService::validRelative(name));
   assert(AppStorageService::validRelative("папка/файл.txt"));
   assert(!fs.grant("/OSEsp32/Notes/a.txt","r"));
+  files["/OSEsp32/Wallpapers/source.bmp"]="BMtest";
+  int wallpaper=fs.grant("/OSEsp32/Wallpapers/source.bmp","r"); assert(wallpaper);
+  assert(fs.close(wallpaper));
+  assert(!fs.grant("/OSEsp32/Wallpapers/source.bmp","w"));
+  assert(fs.permitsDocumentDirectory("/OSEsp32","r"));
+  assert(fs.permitsDocumentDirectory("/OSEsp32/Wallpapers","r"));
+  assert(fs.permitsDocumentDirectory("/OSEsp32/Wallpapers/Archive","r"));
+  assert(!fs.permitsDocumentDirectory("/OSEsp32/Notes","r"));
+  assert(!fs.permitsDocumentDirectory("/OSEsp32","w"));
   assert(!fs.grant("/Documents/a.bmp","w"));
   int handles[4]; for (int& h:handles) { h=fs.open("data:/test.txt","r"); assert(h); }
   assert(!fs.open("data:/test.txt","r"));

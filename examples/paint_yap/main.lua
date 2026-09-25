@@ -13,6 +13,23 @@ local dirty = false
 local drawing = false
 local previousX, previousY = 0, 0
 
+local function friendlyError(err, writing)
+  if err == "unsupported_bmp" or err == "invalid_bmp" then
+    return "Unsupported or damaged BMP"
+  elseif err == "permission_denied" then
+    return "This system folder is protected"
+  elseif err == "storage_removed" then
+    return "SD card was removed"
+  elseif err == "not_found" or err == "invalid_handle" then
+    return "The file is no longer available"
+  elseif err == "no_space" or err == "quota_exceeded" then
+    return "Not enough free space on SD"
+  elseif err == "io_error" then
+    return writing and "Cannot write the file to SD" or "Cannot read the file from SD"
+  end
+  return tostring(err)
+end
+
 local function refreshTools()
   ui.button(1, eraser and "ERASE>" or "PEN>", 2, 178, 51, 28)
   ui.button(2, "S" .. thickness, 55, 178, 51, 28)
@@ -39,7 +56,7 @@ local function loadHandle(handle)
   if ok then setDirty(false)
   else
     setDirty(true)
-    alert("Open failed: " .. tostring(err))
+    alert("Open failed: " .. friendlyError(err, false))
   end
   return ok
 end
@@ -48,20 +65,20 @@ local function openDrawing()
   if dirty and not ui.confirm("Discard unsaved drawing?") then return end
   local handle, err = documents.open()
   if handle then loadHandle(handle)
-  elseif err ~= "cancelled" then alert("Open failed: " .. tostring(err)) end
+  elseif err ~= "cancelled" then alert("Open failed: " .. friendlyError(err, false)) end
 end
 
 local function saveDrawing()
   local handle, err = documents.save("drawing.bmp")
   if not handle then
-    if err ~= "cancelled" then alert("Save failed: " .. tostring(err)) end
+    if err ~= "cancelled" then alert("Save failed: " .. friendlyError(err, true)) end
     return
   end
   local ok
   ok, err = canvas.save_bmp(handle)
   if ok then ok, err = fs.close(handle, true)
   else fs.close(handle, false) end
-  if ok then setDirty(false) else alert("Save failed: " .. tostring(err)) end
+  if ok then setDirty(false) else alert("Save failed: " .. friendlyError(err, true)) end
 end
 
 local function drawTo(x, y)

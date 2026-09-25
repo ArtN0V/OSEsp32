@@ -17,8 +17,8 @@ completion of the separate Stage 4 checklist.
 
 Current reproducible build after the API 1.5 Paint BMP slice:
 
-- static RAM: 102,556 bytes / 327,680 (31.3%);
-- flash: 989,053 bytes / 1,835,008 (53.9%);
+- static RAM: 102,564 bytes / 327,680 (31.3%);
+- flash: 989,437 bytes / 1,835,008 (53.9%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -27,7 +27,7 @@ Current reproducible build after the API 1.5 Paint BMP slice:
 - Canvas probe: one exclusive 320x204 native buffer in RGB565/I8/I4, never a
   Lua pixel table or second full-size framebuffer.
 - Paint: one variable-size exclusive I4 Canvas, bounded clear/line/touch and a
-  fixed 1,280-byte incremental BMP row buffer; no second image-sized buffer.
+  fixed 1,280-byte incremental BMP work buffer; no second image-sized buffer.
 
 These are linker figures, not live heap measurements. Rebuild figures may move
 slightly with toolchain/library versions; LovyanGFX is now pinned at 1.2.28 and
@@ -55,6 +55,7 @@ LVGL at 9.5.0 for reproducibility.
 | P2 | Paint's Canvas format had only estimates, so committing an RGB565 or indexed contract could exhaust or fragment a no-PSRAM board. | Target measurements reject RGB565 (`out_of_memory`) and I8 (20,468-byte largest block) and select I4 (144,500 bytes free, 49,140-byte largest block). |
 | P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 continuations, RTC reset breadcrumbs remain available, and the subsequent target retest was reported stable. |
 | P2 | Paint could draw but had no bounded document round-trip and a naive decoder would require another framebuffer. | Added API 1.5 scanline BMP load/save over capability handles, strict 16/24/32-bit parsing, 24-bit transactional export and SD-removal cancellation that preserves the RAM Canvas. |
+| P2 | Paint rejected every BMP wider than its Canvas and Files could select a BMP under the wallpaper system folder only to fail with an opaque `io_error`. | Import now proportionally samples oversized rows through one bounded window. Document policy permits associated files in the `/OSEsp32/Wallpapers` tree for read only; other system paths and every system-folder write remain blocked. |
 
 ## Remaining risks and debt
 
@@ -82,8 +83,9 @@ LVGL at 9.5.0 for reproducibility.
   is allowed only because diagnostic and shell boot modes are mutually exclusive.
 - Applications receive no raw SD paths from pickers, native handles/pointers,
   LVGL objects, GPIO, network, dynamic native loading or bytecode.
-- Private paths map below `/OSEsp32/Data/<app-id>` and document grants exclude the
-  whole `/OSEsp32` tree. Create and replace are separate manifest permissions.
+- Private paths map below `/OSEsp32/Data/<app-id>`. Document grants exclude the
+  system tree except associated files under `/OSEsp32/Wallpapers`,
+  which are read-only. Create and replace are separate manifest permissions.
 - All system overlays mutate LVGL from the Arduino/UI loop. LVGL callbacks queue
   actions; they do not resume Lua or delete their own active targets.
 - Fullscreen/exclusive show no system exit button. Normal apps call `exit()`;

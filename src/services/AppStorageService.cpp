@@ -109,8 +109,11 @@ bool AppStorageService::resolve(const char* path, char* target, bool writeAccess
   return (n>0 && n<129) || fail("invalid_path");
 }
 bool AppStorageService::permitsDocument(const char* path, const char* mode) const {
-  if (!path || path[0]!='/' || !validRelative(path+1) ||
-      !strncasecmp(path,"/OSEsp32/",9) || !strcasecmp(path,"/OSEsp32")) return false;
+  if (!path || path[0]!='/' || !validRelative(path+1)) return false;
+  const bool systemPath=!strncasecmp(path,"/OSEsp32/",9) || !strcasecmp(path,"/OSEsp32");
+  const bool wallpaperRead=!strcmp(mode,"r") &&
+      !strncasecmp(path,"/OSEsp32/Wallpapers/",sizeof("/OSEsp32/Wallpapers/")-1);
+  if (systemPath && !wallpaperRead) return false;
   uint32_t cap = !strcmp(mode,"r") ? YapDocumentsOpen :
                  !strcmp(mode,"x") ? YapDocumentsCreate :
                  !strcmp(mode,"w") ? YapDocumentsReplace : 0;
@@ -120,6 +123,15 @@ bool AppStorageService::permitsDocument(const char* path, const char* mode) cons
   for (uint8_t i=0;i<package_.manifest.associationCount;++i)
     if (!strcasecmp(ext+1,package_.manifest.associations[i])) return true;
   return false;
+}
+bool AppStorageService::permitsDocumentDirectory(const char* path,const char* mode) const {
+  if (!path || path[0]!='/' || !validRelative(path+1,true)) return false;
+  if (strcasecmp(path,"/OSEsp32") && strncasecmp(path,"/OSEsp32/",9)) return true;
+  if (strcmp(mode,"r")) return false;
+  return !strcasecmp(path,"/OSEsp32") ||
+         !strcasecmp(path,"/OSEsp32/Wallpapers") ||
+         !strncasecmp(path,"/OSEsp32/Wallpapers/",
+                      sizeof("/OSEsp32/Wallpapers/")-1);
 }
 int AppStorageService::grant(const char* path,const char* mode) {
   if (!ready()) return 0;

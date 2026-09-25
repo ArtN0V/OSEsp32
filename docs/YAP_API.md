@@ -104,19 +104,20 @@ either Canvas kind.
 
 ### API 1.5 Canvas BMP documents
 
-BMP conversion stays native and processes one scanline per UI-loop update. It
+BMP conversion stays native and processes a bounded part of one scanline per
+UI-loop update. It
 does not allocate a second framebuffer or expose scanlines to Lua. These calls
 are exclusive-only, require an active I4 Canvas and accept live capability
 handles (Paint obtains them from the system document API).
 
 | Call | Contract |
 |---|---|
-| `canvas.load_bmp(h)` | Replace the Canvas with a top-left-aligned, palette-quantized BMP. Accepts bounded uncompressed 16/24/32-bit input and common 16/32-bit RGB bitfields. Dimensions must fit the active Canvas. Returns true or `nil,error`. The caller closes the read handle. |
+| `canvas.load_bmp(h)` | Replace the Canvas with a palette-quantized BMP. Accepts uncompressed 16/24/32-bit input and common 16/32-bit RGB bitfields. Oversized input is proportionally reduced and centered; smaller input remains top-left at native size. Returns true or `nil,error`. The caller closes the read handle. |
 | `canvas.save_bmp(h)` | Stream the complete Canvas as interoperable bottom-up 24-bit BGR with four-byte row padding. Returns true or `nil,error`. The caller must commit with `fs.close(h,true)` only after success, or discard with `fs.close(h,false)`. |
 
-Loading clears uncovered Canvas pixels to white. Alpha is ignored. RLE,
-indexed source BMP, OS/2 headers, color profiles, scaling and images larger
-than the Canvas are rejected. During transfer Canvas touch is ignored. SD
+Loading clears uncovered Canvas pixels to white. Downscaling uses bounded
+nearest-neighbor sampling; images are never enlarged. Alpha is ignored. RLE,
+indexed source BMP, OS/2 headers and color profiles are rejected. During transfer Canvas touch is ignored. SD
 removal cancels the transfer and invalidates its handle but retains the RAM
 Canvas; after Retry the call returns `storage_removed`, so the app can report
 failure without losing the current drawing.
@@ -169,7 +170,8 @@ call sleep(1) between 512-byte chunks; native SD calls cannot be preempted.
   remains usable until closed or invalidated.
 
 The picker starts in `/Documents`, supports folders, parent navigation and
-paging. `/OSEsp32` is excluded. Save's proposed name is supplied by the app;
+paging. System directories are excluded except read-only associated documents
+inside the `/OSEsp32/Wallpapers` tree; writes there remain forbidden. Save's proposed name is supplied by the app;
 use ui.text before save if the app needs filename editing. Cancel returns
 nil,cancelled. A manifest alone never grants a user document.
 

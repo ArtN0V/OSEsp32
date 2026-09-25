@@ -24,6 +24,7 @@ class AppStorageService {
   bool mkdir(const char* path);
   const char* error() const { return error_; }
   bool permitsDocument(const char* path, const char* mode) const;
+  bool permitsDocumentDirectory(const char* path, const char* mode) const;
   static bool validRelative(const char* path, bool emptyAllowed = false);
  private:
   struct Handle {

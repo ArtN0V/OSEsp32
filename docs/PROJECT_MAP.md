@@ -58,7 +58,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |
 | `src/services/AppStorageService.*` | Per-session file capabilities and recoverable writes | Four monotonically numbered handles; 512-byte transfers; app:/ and data:/ only. |
 | `src/services/FileAssociationService.*` | Bounded discovery and persisted user choices | Up to 64 root entries in Apps / 8 candidates; one package checked per loop. |
-| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers, Canvas probe, I4 drawing and incremental BMP host | Sole LVGL owner; BMP uses one fixed row buffer and document handles, while Canvas release detaches the image source before destroying its buffer. |
+| `src/ui/YapUiHost.*` | Bounded YAP widgets, dialogs/pickers, Canvas probe, I4 drawing and incremental BMP host | Sole LVGL owner; BMP uses one fixed work buffer and document handles, while Canvas release detaches the image source before destroying its buffer. |
 | `src/runtime/YapRuntimeService.*` | Quota-limited Lua VM plus fixed UI/event/timer and Canvas command models | start/update/stop; 24 widgets, 8 events and 4 timers; no LVGL ownership or pixel arrays. |
 | `src/runtime/AppLifecycle.h` | Foreground session state machine | UI callbacks queue exit; shell loop advances preparation, running, stop and restore. |
 | `src/ui/SystemExitGesture.h` | Invisible fullscreen emergency exit | Hold top-left 32x32 pixels for 2 seconds after release; tested independently of LVGL. |
@@ -101,8 +101,9 @@ dialogs and should migrate gradually, without duplicating the shared keyboard.
 - Full-screen framebuffers and general virtual memory/swap are prohibited.
 - The Stage 5 probe may own one 320x204 Canvas buffer only in exclusive mode;
   it is released before shell restoration. No second full-size buffer is used.
-- Paint BMP transfer uses a fixed 1,280-byte native scanline buffer and advances
-  one row per shell update; the I4 Canvas remains the only image-sized buffer.
+- Paint BMP transfer uses a fixed 1,280-byte native work buffer and advances at
+  most one 508-byte input window per shell update; oversized input is sampled
+  down without another image-sized buffer.
 - Always watch both free heap and largest free block; total free bytes alone do
   not reveal fragmentation.
 
@@ -117,10 +118,11 @@ dialogs and should migrate gradually, without duplicating the shared keyboard.
 | `/OSEsp32/Transactions/0..3.{txn,data,old}` | `AppStorageService` | YTX1 checksummed target journal, staged bytes, backup |
 | `/Documents` | user/system pickers | default document folder; other non-system folders may be selected |
 | `/OSEsp32/Notes` | `NotesService` | first line title, remaining UTF-8 body, `.note` |
-| `/OSEsp32/Wallpapers/desktop.owp` | `WallpaperService` | packed `OWP1`, 320×204 RGB565 |
+| `/OSEsp32/Wallpapers/desktop.owp` | `WallpaperService` | packed `OWP1`, 320×204 RGB565; associated source documents in this directory are readable but not writable by YAP apps |
 
 Recognized user images are uncompressed BMP 16/24/32-bit and baseline JPEG.
-Progressive JPEG, PNG and arbitrary scaling are not implemented.
+Paint can proportionally downscale BMP while importing; progressive JPEG, PNG
+and general Image Viewer scaling are not implemented.
 
 ### NVS namespaces
 
