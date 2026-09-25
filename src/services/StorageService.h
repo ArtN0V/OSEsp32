@@ -70,6 +70,7 @@ class StorageService {
   mutable char rangeReadPath_[129] = {};
   mutable File rangeWriteFile_;
   mutable char rangeWritePath_[129] = {};
+  mutable uint32_t rangeWriteSize_ = 0;
 
   bool mount();
   void ensureSystemDirectories();

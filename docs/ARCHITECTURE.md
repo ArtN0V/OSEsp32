@@ -368,7 +368,9 @@ boundaries so a watchdog reset can be separated from an ordinary app exit.
 - Bounded range reads and writes reuse one `File` stream per direction instead
   of reopening FAT for each 512-byte chunk. They close and flush on handle
   close, explicit flush, mutation, raw-card probe and removal, preventing long
-  BMP transfers from fragmenting the internal heap.
+  BMP transfers from fragmenting the internal heap. The writer maintains its
+  own logical length because the SD library can report the pre-flush size while
+  buffered blocks are still pending.
 - Every public path operation uses one bounded component canonicalizer. It
   accepts UTF-8 bytes but rejects traversal components, control characters,
   backslashes, reserved separators and overlong output.

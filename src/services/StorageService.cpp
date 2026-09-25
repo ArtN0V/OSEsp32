@@ -284,15 +284,18 @@ bool StorageService::writeRange(const char* path, uint32_t offset,
   if (truncate || !rangeWriteFile_ || strcasecmp(rangeWritePath_,normalized)) {
     releaseWriteFile();
     rangeWriteFile_=SD.open(normalized,truncate ? "w" : "r+");
-    if (rangeWriteFile_ && !rangeWriteFile_.isDirectory())
+    if (rangeWriteFile_ && !rangeWriteFile_.isDirectory()) {
       strlcpy(rangeWritePath_,normalized,sizeof(rangeWritePath_));
+      rangeWriteSize_=truncate ? 0 : static_cast<uint32_t>(rangeWriteFile_.size());
+    }
   }
   if (!rangeWriteFile_ || rangeWriteFile_.isDirectory()) {
     releaseWriteFile(); return false;
   }
-  const bool ok=offset<=rangeWriteFile_.size() && rangeWriteFile_.seek(offset) &&
+  const bool ok=offset<=rangeWriteSize_ && rangeWriteFile_.seek(offset) &&
                 (!length || rangeWriteFile_.write(data,length)==length);
-  if (!ok) releaseWriteFile();
+  if (ok) rangeWriteSize_=max(rangeWriteSize_,offset+static_cast<uint32_t>(length));
+  else releaseWriteFile();
   return ok;
 }
 
@@ -354,6 +357,7 @@ void StorageService::releaseWriteFile(const char* path) const {
   }
   rangeWriteFile_=File();
   rangeWritePath_[0]=0;
+  rangeWriteSize_=0;
 }
 
 bool StorageService::computeFileCrc32(const char* path, uint32_t offset,

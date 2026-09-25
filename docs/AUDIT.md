@@ -18,7 +18,7 @@ completion of the separate Stage 4 checklist.
 Current reproducible build after the API 1.5 Paint BMP slice:
 
 - static RAM: 102,884 bytes / 327,680 (31.4%);
-- flash: 990,105 bytes / 1,835,008 (54.0%);
+- flash: 990,121 bytes / 1,835,008 (54.0%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
