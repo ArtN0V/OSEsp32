@@ -17,8 +17,8 @@ completion of the separate Stage 4 checklist.
 
 Current reproducible build after the API 1.5 Paint BMP slice:
 
-- static RAM: 102,564 bytes / 327,680 (31.3%);
-- flash: 989,437 bytes / 1,835,008 (53.9%);
+- static RAM: 102,884 bytes / 327,680 (31.4%);
+- flash: 990,105 bytes / 1,835,008 (54.0%);
 - PSRAM: not used or assumed;
 - LVGL: two 320x20 RGB565 partial buffers; no full-screen framebuffer;
 - Lua: 16–96 KiB quota, one VM, one host coroutine;
@@ -56,6 +56,7 @@ LVGL at 9.5.0 for reproducibility.
 | P1 | Repeating I8/I4 first closed on cycle two or three; after replacing `lv_canvas`, a later run still appeared to reboot at random probe operations. | `YapUiHost` uses a plain image, detaches its source before ordered object/buffer destruction, and performs no cache calls because caches are disabled. A real 24 KiB Lua VM passes 64 continuations, RTC reset breadcrumbs remain available, and the subsequent target retest was reported stable. |
 | P2 | Paint could draw but had no bounded document round-trip and a naive decoder would require another framebuffer. | Added API 1.5 scanline BMP load/save over capability handles, strict 16/24/32-bit parsing, 24-bit transactional export and SD-removal cancellation that preserves the RAM Canvas. |
 | P2 | Paint rejected every BMP wider than its Canvas and Files could select a BMP under the wallpaper system folder only to fail with an opaque `io_error`. | Import now proportionally samples oversized rows through one bounded window. Document policy permits associated files in the `/OSEsp32/Wallpapers` tree for read only; other system paths and every system-folder write remain blocked. |
+| P1 | After BMP import, the first Paint stroke could reset the board with `interrupt-wdt`; range I/O reopened and closed the FAT file for every 512-byte block, creating hundreds or thousands of temporary allocations before LVGL redraw. | `StorageService` now reuses read and write streams and closes them at flush, handle, mutation, probe and removal boundaries. Brush pixels write directly into packed I4 rows, only the dirty area is redrawn, and retained diagnostics distinguish BMP read/input/draw/redraw if a target failure remains. Target confirmation is still required. |
 
 ## Remaining risks and debt
 

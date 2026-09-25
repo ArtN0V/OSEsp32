@@ -53,6 +53,8 @@ void StorageService::ensureSystemDirectories() {
 
 void StorageService::markRemoved() {
   if (!mounted_) return;
+  releaseReadFile();
+  releaseWriteFile();
   mounted_ = false;
   ++generation_;
   SD.end();
@@ -65,6 +67,9 @@ void StorageService::update() {
   if (now - lastProbeMs_ < 3000) return;
   lastProbeMs_ = now;
   if (mounted_) {
+    // Raw sector probes must not overlap an active FAT file operation.
+    releaseReadFile();
+    releaseWriteFile();
     uint8_t probe[512];
     if (SD.cardType() == CARD_NONE || !SD.readRAW(probe, 0)) markRemoved();
   } else {
@@ -172,6 +177,8 @@ bool StorageService::recoverBuiltinReplacement(const char* path) {
 }
 
 bool StorageService::removePath(const char* path) {
+  releaseReadFile();
+  releaseWriteFile();
   char normalized[129];
   return mounted_ && normalizePath(path, normalized, sizeof(normalized)) &&
          strcmp(normalized, "/") &&
@@ -179,6 +186,8 @@ bool StorageService::removePath(const char* path) {
 }
 
 bool StorageService::renamePath(const char* from, const char* to) {
+  releaseReadFile();
+  releaseWriteFile();
   char normalizedFrom[129];
   char normalizedTo[129];
   if (!mounted_ ||
@@ -193,6 +202,8 @@ bool StorageService::renamePath(const char* from, const char* to) {
 
 bool StorageService::replacePathAtomic(const char* completedTemporary,
                                        const char* destination) {
+  releaseReadFile();
+  releaseWriteFile();
   char temporary[145];
   char target[129];
   if (!mounted_ ||
@@ -225,6 +236,8 @@ bool StorageService::replacePathAtomic(const char* completedTemporary,
 
 bool StorageService::readFile(const char* path, char* buffer, size_t capacity,
                               size_t& length, bool allowTruncate) {
+  releaseReadFile();
+  releaseWriteFile(path);
   length = 0;
   if (!mounted_ || !path || !buffer || capacity < 2) return false;
   char normalized[129];
@@ -264,15 +277,22 @@ uint64_t StorageService::freeBytes() const {
 
 bool StorageService::writeRange(const char* path, uint32_t offset,
                                 const uint8_t* data, size_t length, bool truncate) {
+  releaseReadFile();
   char normalized[129];
   if (!mounted_ || length > 512 || (!data && length) ||
       !normalizePath(path, normalized, sizeof(normalized))) return false;
-  File file = SD.open(normalized, truncate ? "w" : "r+");
-  if (!file || file.isDirectory()) { file.close(); return false; }
-  const bool ok = offset <= file.size() && file.seek(offset) &&
-                  (!length || file.write(data, length) == length);
-  file.flush();
-  file.close();
+  if (truncate || !rangeWriteFile_ || strcasecmp(rangeWritePath_,normalized)) {
+    releaseWriteFile();
+    rangeWriteFile_=SD.open(normalized,truncate ? "w" : "r+");
+    if (rangeWriteFile_ && !rangeWriteFile_.isDirectory())
+      strlcpy(rangeWritePath_,normalized,sizeof(rangeWritePath_));
+  }
+  if (!rangeWriteFile_ || rangeWriteFile_.isDirectory()) {
+    releaseWriteFile(); return false;
+  }
+  const bool ok=offset<=rangeWriteFile_.size() && rangeWriteFile_.seek(offset) &&
+                (!length || rangeWriteFile_.write(data,length)==length);
+  if (!ok) releaseWriteFile();
   return ok;
 }
 
@@ -298,24 +318,50 @@ bool StorageService::readFileRange(const char* path, uint32_t offset,
   if (!mounted_ || !path || (!buffer && length)) return false;
   char normalized[129];
   if (!normalizePath(path, normalized, sizeof(normalized))) return false;
-  File file = SD.open(normalized, FILE_READ);
-  if (!file || file.isDirectory()) {
-    if (file) file.close();
+  releaseWriteFile(normalized);
+  if (!rangeReadFile_ || strcasecmp(rangeReadPath_,normalized)) {
+    releaseReadFile();
+    rangeReadFile_=SD.open(normalized,FILE_READ);
+    if (rangeReadFile_ && !rangeReadFile_.isDirectory())
+      strlcpy(rangeReadPath_,normalized,sizeof(rangeReadPath_));
+  }
+  if (!rangeReadFile_ || rangeReadFile_.isDirectory()) {
+    releaseReadFile();
     return false;
   }
-  if (offset > static_cast<uint32_t>(file.size()) || !file.seek(offset)) {
-    file.close();
+  if (offset > static_cast<uint32_t>(rangeReadFile_.size()) ||
+      !rangeReadFile_.seek(offset)) {
+    releaseReadFile();
     return false;
   }
-  bytesRead = file.read(buffer, length);
-  file.close();
-  return bytesRead == length;
+  bytesRead=rangeReadFile_.read(buffer,length);
+  if (bytesRead!=length) { releaseReadFile(); return false; }
+  return true;
+}
+
+void StorageService::releaseReadFile(const char* path) const {
+  if (path && *rangeReadPath_ && strcasecmp(path,rangeReadPath_)) return;
+  if (rangeReadFile_) rangeReadFile_.close();
+  rangeReadFile_=File();
+  rangeReadPath_[0]=0;
+}
+
+void StorageService::releaseWriteFile(const char* path) const {
+  if (path && *rangeWritePath_ && strcasecmp(path,rangeWritePath_)) return;
+  if (rangeWriteFile_) {
+    rangeWriteFile_.flush();
+    rangeWriteFile_.close();
+  }
+  rangeWriteFile_=File();
+  rangeWritePath_[0]=0;
 }
 
 bool StorageService::computeFileCrc32(const char* path, uint32_t offset,
                                       uint32_t length, uint32_t& crc,
                                       uint32_t zeroOffset,
                                       uint32_t zeroLength) const {
+  releaseReadFile();
+  releaseWriteFile(path);
   crc = 0;
   if (!mounted_ || !path) return false;
   char normalized[129];
@@ -363,6 +409,8 @@ bool StorageService::computeFileCrc32(const char* path, uint32_t offset,
 
 bool StorageService::writeFileAtomic(const char* path, const uint8_t* data,
                                      size_t length) {
+  releaseReadFile();
+  releaseWriteFile();
   if (!mounted_ || !path || (!data && length) || !path[0]) return false;
   char normalized[129];
   if (!normalizePath(path, normalized, sizeof(normalized)) ||

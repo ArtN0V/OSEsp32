@@ -36,6 +36,10 @@ class StorageService {
   bool fileSize(const char* path, uint32_t& size) const;
   bool readFileRange(const char* path, uint32_t offset, uint8_t* buffer,
                      size_t length, size_t& bytesRead) const;
+  // Release reusable range streams. A matching path closes only that stream;
+  // nullptr closes whichever stream is active.
+  void releaseReadFile(const char* path = nullptr) const;
+  void releaseWriteFile(const char* path = nullptr) const;
   bool computeFileCrc32(const char* path, uint32_t offset, uint32_t length,
                         uint32_t& crc, uint32_t zeroOffset = UINT32_MAX,
                         uint32_t zeroLength = 0) const;
@@ -62,6 +66,10 @@ class StorageService {
   bool unavailableReported_ = false;
   uint32_t lastProbeMs_ = 0;
   lv_fs_drv_t lvglDriver_;
+  mutable File rangeReadFile_;
+  mutable char rangeReadPath_[129] = {};
+  mutable File rangeWriteFile_;
+  mutable char rangeWritePath_[129] = {};
 
   bool mount();
   void ensureSystemDirectories();

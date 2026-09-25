@@ -160,7 +160,10 @@ The implementation advances at most one 508-byte source-row window per shell
 update and splits physical file operations into at most 512-byte transfers. A
 fixed 1,280-byte work buffer is the only additional pixel storage. Oversized
 BMPs are proportionally reduced with nearest-neighbor sampling and centered on
-the white Canvas. SD removal cancels an in-flight transfer,
+the white Canvas. All chunks reuse native read/write streams; reopening the FAT
+file for every chunk is prohibited because hundreds of temporary objects
+fragment the no-PSRAM heap. Explicit flush and transactional close synchronise
+the cached writer before commit. SD removal cancels an in-flight transfer,
 invalidates handles and opens the existing Retry/Close overlay without freeing
 the RAM Canvas. The Lua call receives `storage_removed` after a successful
 Retry; failed output is discarded because Paint commits only after

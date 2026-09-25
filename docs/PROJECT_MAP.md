@@ -52,7 +52,7 @@ Arduino global `SD` implementation without concurrent access.
 | `src/services/BootModeService.*` | One-shot diagnostics boot request | NVS-backed. |
 | `src/services/SystemSettingsService.*` | Shell settings persistence | NVS-backed; currently one method per key. |
 | `src/services/DateTimeService.*` | Software UTC clock and local offset | No RTC and no Wi-Fi source yet. |
-| `src/services/StorageService.*` | Shell SD owner and LVGL `S:` bridge | All public paths are canonicalized; replacement preserves a backup. |
+| `src/services/StorageService.*` | Shell SD owner, reusable bounded range streams and LVGL `S:` bridge | All public paths are canonicalized; cached read/write streams avoid per-chunk FAT allocation and close before raw probes or mutation. |
 | `src/services/WallpaperService.*` | OWP1 conversion and two-strip decoder cache | Uses private LVGL decoder APIs pinned to LVGL 9.5.0. |
 | `src/services/NotesService.*` | Bounded `.note` listing/load/save/delete | Delete accepts only direct `.note` children of `/OSEsp32/Notes`; UI belongs elsewhere. |
 | `src/services/YapPackageService.*` | Streaming YAP1 header, section, CRC and manifest validator | Never executes code; fixed 16-section table and 256-byte CRC chunks. |

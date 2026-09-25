@@ -13,6 +13,11 @@ enum class ResetCheckpoint : uint8_t {
   CanvasAnimate,
   CanvasRelease,
   CanvasReleased,
+  CanvasBmpRead,
+  CanvasReady,
+  CanvasInput,
+  CanvasDraw,
+  CanvasRedraw,
 };
 
 class ResetDiagnostics {

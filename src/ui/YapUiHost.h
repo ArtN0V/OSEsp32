@@ -41,6 +41,7 @@ class YapUiHost {
   uint8_t canvasFramesIssued_=0, canvasFramesRecorded_=0;
   int16_t canvasPreviousX_=-1, canvasPreviousY_=-1;
   int16_t canvasTouchX_=-1, canvasTouchY_=-1;
+  bool canvasRedrawPending_=false;
   uint32_t canvasLastFrameMs_=0, canvasFrameTotalMs_=0;
   enum class CanvasIoKind : uint8_t { None, LoadBmp, SaveBmp };
   struct CanvasIoState {

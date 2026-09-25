@@ -277,6 +277,8 @@ marks allocation, fill, animation and release boundaries; boot captures the
 previous marker and `esp_reset_reason()`, and System Info exposes both. This is
 crash triage rather than persistent settings or an RTC clock, and complete
 power removal may erase it.
+BMP import and drawing additionally mark read, ready, input, draw and redraw
+boundaries so a watchdog reset can be separated from an ordinary app exit.
 
 ## Stage 3 image policy
 
@@ -363,6 +365,10 @@ power removal may erase it.
 - `StorageService` is the only shell-mode owner of Arduino `SD`; diagnostic
   mode uses a separate driver only because the two modes are mutually
   exclusive.
+- Bounded range reads and writes reuse one `File` stream per direction instead
+  of reopening FAT for each 512-byte chunk. They close and flush on handle
+  close, explicit flush, mutation, raw-card probe and removal, preventing long
+  BMP transfers from fragmenting the internal heap.
 - Every public path operation uses one bounded component canonicalizer. It
   accepts UTF-8 bytes but rejects traversal components, control characters,
   backslashes, reserved separators and overlong output.

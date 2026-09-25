@@ -72,6 +72,8 @@ bool StorageService::readFileRange(const char* path, uint32_t offset, uint8_t* o
   memcpy(out, data.data() + offset, received);
   return true;
 }
+void StorageService::releaseReadFile(const char*) const {}
+void StorageService::releaseWriteFile(const char*) const {}
 
 int main(int argc,char** argv) {
   StorageService storage;

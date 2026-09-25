@@ -81,7 +81,13 @@ void AppStorageService::begin(StorageService& storage, const YapPackageInfo& pac
   error_="ok";
 }
 void AppStorageService::invalidate() {
-  for (auto& h:handles_) h = {};
+  for (auto& h:handles_) {
+    if (storage_ && h.token) {
+      if (h.writable) storage_->releaseWriteFile(h.path);
+      else storage_->releaseReadFile(h.path);
+    }
+    h = {};
+  }
   generation_=UINT32_MAX;
 }
 void AppStorageService::end() {
@@ -235,10 +241,17 @@ bool AppStorageService::size(int token,uint32_t& length) {
   Handle* h=handle(token); if (!h) return false;
   length=h->length; return true;
 }
-bool AppStorageService::flush(int token) { return handle(token)!=nullptr; }
+bool AppStorageService::flush(int token) {
+  Handle* h=handle(token); if (!h) return false;
+  if (h->writable) storage_->releaseWriteFile(h->path);
+  return true;
+}
 bool AppStorageService::close(int token,bool commit) {
   Handle* h=handle(token); if (!h) return false;
-  if (!h->writable) { *h={}; return true; }
+  if (!h->writable) {
+    storage_->releaseReadFile(h->path);
+    *h={}; return true;
+  }
   const uint8_t slot=h-handles_;
   char data[64],backup[64],journal[64]; transactionPaths(slot,data,backup,journal);
   bool ok=true;

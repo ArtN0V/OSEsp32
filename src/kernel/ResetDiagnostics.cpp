@@ -22,7 +22,7 @@ void ResetDiagnostics::begin() {
   resetReason_ = static_cast<int>(esp_reset_reason());
   if (retainedResetState.magic == RETAINED_MAGIC &&
       retainedResetState.checkpoint <=
-          static_cast<uint8_t>(ResetCheckpoint::CanvasReleased)) {
+          static_cast<uint8_t>(ResetCheckpoint::CanvasRedraw)) {
     previousCheckpoint_ =
         static_cast<ResetCheckpoint>(retainedResetState.checkpoint);
   } else {
@@ -69,6 +69,11 @@ const char* ResetDiagnostics::previousCheckpointName() {
     case ResetCheckpoint::CanvasAnimate: return "canvas-animate";
     case ResetCheckpoint::CanvasRelease: return "canvas-release";
     case ResetCheckpoint::CanvasReleased: return "canvas-released";
+    case ResetCheckpoint::CanvasBmpRead: return "canvas-bmp-read";
+    case ResetCheckpoint::CanvasReady: return "canvas-ready";
+    case ResetCheckpoint::CanvasInput: return "canvas-input";
+    case ResetCheckpoint::CanvasDraw: return "canvas-draw";
+    case ResetCheckpoint::CanvasRedraw: return "canvas-redraw";
   }
   return "invalid";
 }

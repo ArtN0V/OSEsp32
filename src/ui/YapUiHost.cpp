@@ -168,6 +168,7 @@ void YapUiHost::releaseCanvas() {
   canvasFramesIssued_=canvasFramesRecorded_=0;
   canvasPreviousX_=canvasPreviousY_=-1;
   canvasTouchX_=canvasTouchY_=-1;
+  canvasRedrawPending_=false;
   if (hadCanvas) ResetDiagnostics::mark(ResetCheckpoint::CanvasReleased);
 }
 
@@ -299,6 +300,17 @@ void YapUiHost::clearDrawingCanvas(uint8_t color) {
 
 void YapUiHost::drawCanvasLine(const YapRuntimeService::CanvasCommand& command) {
   if (!canvas_ || !canvasBuffer_ || canvasFormat_!=LV_COLOR_FORMAT_I4) return;
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasDraw);
+  uint8_t* pixels=static_cast<uint8_t*>(lv_draw_buf_goto_xy(canvasBuffer_,0,0));
+  if (!pixels) return;
+  const uint32_t stride=canvasBuffer_->header.stride;
+  auto setPixel=[this,pixels,stride](int x,int y,uint8_t color) {
+    if (x<0 || y<0 || x>=canvasWidth_ || y>=canvasHeight_) return;
+    uint8_t& pixel=pixels[static_cast<uint32_t>(y)*stride+static_cast<uint32_t>(x)/2];
+    color&=0x0f;
+    if (x&1) pixel=(pixel&0xf0)|color;
+    else pixel=(pixel&0x0f)|(color<<4);
+  };
   int x0=command.x1, y0=command.y1, x1=command.x2, y1=command.y2;
   const int half=command.thickness/2;
   const int dx=abs(x1-x0), stepX=x0<x1 ? 1 : -1;
@@ -307,13 +319,14 @@ void YapUiHost::drawCanvasLine(const YapRuntimeService::CanvasCommand& command) 
   while (true) {
     for (int y=y0-half;y<=y0+half;++y)
       for (int x=x0-half;x<=x0+half;++x)
-        setCanvasIndexPixel(x,y,command.color);
+        setPixel(x,y,command.color);
     if (x0==x1 && y0==y1) break;
     const int doubled=2*error;
     if (doubled>=dy) { error+=dy; x0+=stepX; }
     if (doubled<=dx) { error+=dx; y0+=stepY; }
   }
   lv_draw_buf_flush_cache(canvasBuffer_,nullptr);
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasRedraw);
   lv_area_t objectArea; lv_obj_get_coords(canvas_,&objectArea);
   const int left=max(0,min(command.x1,command.x2)-half);
   const int top=max(0,min(command.y1,command.y2)-half);
@@ -327,6 +340,7 @@ void YapUiHost::drawCanvasLine(const YapRuntimeService::CanvasCommand& command) 
     static_cast<int32_t>(objectArea.x1+right),
     static_cast<int32_t>(objectArea.y1+bottom)};
   lv_obj_invalidate_area(canvas_,&dirty);
+  canvasRedrawPending_=true;
 }
 
 uint8_t YapUiHost::canvasIndexPixel(int16_t x,int16_t y) const {
@@ -393,6 +407,7 @@ bool YapUiHost::beginCanvasBmpLoad(int handle,const char*& errorText) {
     redMask=0x00ff0000; greenMask=0x0000ff00; blueMask=0x000000ff;
   }
   clearDrawingCanvas(15);
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasBmpRead);
   const uint32_t sourceWidth=static_cast<uint32_t>(signedWidth);
   uint32_t targetWidth=sourceWidth, targetHeight=height;
   if (sourceWidth>canvasWidth_ || height>canvasHeight_) {
@@ -465,7 +480,8 @@ void YapUiHost::updateCanvasIo() {
         !runtime_->files().flush(canvasIo_.handle)) {
       fail(runtime_->files().error()); return;
     }
-    runtime_->replyCanvasCommand(); cancelCanvasIo(); return;
+    runtime_->replyCanvasCommand(); cancelCanvasIo();
+    ResetDiagnostics::mark(ResetCheckpoint::CanvasReady); return;
   }
   if (canvasIo_.kind==CanvasIoKind::LoadBmp) {
     const uint32_t sourceY=static_cast<uint32_t>(canvasIo_.row)*
@@ -546,6 +562,7 @@ void YapUiHost::canvasEvent(lv_event_t* event) {
   const lv_event_code_t code=lv_event_get_code(event);
   if (code!=LV_EVENT_PRESSED && code!=LV_EVENT_PRESSING && code!=LV_EVENT_RELEASED)
     return;
+  ResetDiagnostics::mark(ResetCheckpoint::CanvasInput);
   lv_indev_t* input=lv_indev_active();
   if (!input) return;
   lv_point_t point; lv_indev_get_point(input,&point);
@@ -763,6 +780,13 @@ void YapUiHost::storageRestored() { dismiss(); lost_=false; runtime_->resumeStor
 void YapUiHost::retryFailed() { error(tr("Insert the original app card and retry","Верните карту приложения и повторите")); }
 void YapUiHost::update() {
   if (!runtime_) return;
+  // DesktopShell invokes us after lv_timer_handler(). Reaching this point
+  // proves that the redraw queued by the previous stroke completed without a
+  // watchdog reset.
+  if (canvasRedrawPending_) {
+    canvasRedrawPending_=false;
+    ResetDiagnostics::mark(ResetCheckpoint::CanvasReady);
+  }
   int action=action_; action_=0;
   if (lost_) {
     if (action==40) retry_=true;
